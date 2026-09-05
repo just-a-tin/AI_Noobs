@@ -57,6 +57,30 @@ def presentation() -> dict:
     return {level.value: meta for level, meta in RISK_PRESENTATION.items()}
 
 
+def explain_failure(exc: Exception) -> str:
+    """Turn a provider error into something a badge can usefully show.
+
+    Raw text like "The security token included in the request is expired"
+    reaches the user as-is otherwise, which says nothing about what to do.
+    Temporary SSO credentials expire within hours, so this is the failure the
+    operator will hit most often.
+    """
+    raw = str(exc)
+    lowered = raw.lower()
+
+    if "expired" in lowered and "token" in lowered:
+        return "AWS credentials have expired — refresh them from the SSO portal and update .env"
+    if "not available for this account" in lowered:
+        return "This AWS account is not entitled to the configured model — run scripts/list_models.py"
+    if "explicit deny" in lowered:
+        return "A service control policy blocks this Bedrock API — try BEDROCK_API=runtime"
+    if "throttl" in lowered or "too many requests" in lowered:
+        return "Bedrock is rate limiting — wait a moment and retry"
+    if "could not connect" in lowered or "endpoint" in lowered:
+        return "Cannot reach Bedrock — check the region and network"
+    return f"Analysis failed: {raw[:200]}"
+
+
 @app.post("/api/v1/analyze", response_model=AnalysisResult)
 async def analyze(request: AnalyzeRequest) -> AnalysisResult:
     started = time.perf_counter()
@@ -72,14 +96,14 @@ async def analyze(request: AnalyzeRequest) -> AnalysisResult:
         log.exception("analysis failed for %s", request.cache_key())
         # Deliberately not a fabricated neutral score: the extension must be
         # able to tell "we could not verify this" from "this looks fine".
-        raise HTTPException(status_code=502, detail=f"Analysis failed: {exc}") from exc
+        raise HTTPException(status_code=502, detail=explain_failure(exc)) from exc
 
     result = AnalysisResult(
         **core.model_dump(),
         riskLevel=derive_risk_level(core.overallTrustScore),
         listedLongestCm=listed_longest_cm(request.specs),
         cached=False,
-        modelId="mock" if settings.mock_aws else settings.model_id,
+        modelId="mock" if settings.mock_bedrock else settings.model_id,
         analyzedAt=int(time.time()),
     )
 
