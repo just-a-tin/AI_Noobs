@@ -94,6 +94,7 @@ def test_subscores_present_for_ui_breakdown():
         "specConsistency",
         "priceSanity",
         "scaleFidelity",
+        "reviewCredibility",
     }
 
 

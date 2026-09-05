@@ -41,6 +41,14 @@ def test_analyze_returns_full_contract():
         "specConsistency",
         "priceSanity",
         "scaleFidelity",
+        "reviewCredibility",
+    }
+    assert set(body["reviewAnalysis"]) == {
+        "usableReviewCount",
+        "complaintThemes",
+        "contradictsListing",
+        "suspectedFakeReviews",
+        "explanation",
     }
     assert set(body["scaleAnalysis"]) == {
         "identifiedProduct",

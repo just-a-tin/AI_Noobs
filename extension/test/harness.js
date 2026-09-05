@@ -139,6 +139,7 @@
         ${bar("Spec consistency", s.specConsistency)}
         ${bar("Price sanity", s.priceSanity)}
         ${bar("Scale fidelity", s.scaleFidelity)}
+        ${bar("Review credibility", s.reviewCredibility)}
         ${sizePanel(verdict)}
         <div style="font-size:11px;color:#64748b;margin-top:8px">Preview — mock verdict</div>
       </div>

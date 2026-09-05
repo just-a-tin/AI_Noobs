@@ -76,6 +76,15 @@ after a CDK deploy. Tests set `SENTINEL_SKIP_DOTENV=1` so a developer's local
   ancestors, circular border-radius and links to *other* product ids. A verdict
   about someone's profile picture is worse than no verdict. The fixture page
   carries one of each distractor and the harness asserts none leak through.
+- **Review text is filtered before it is sent, and the stats go too.** Empty
+  and one-or-two-word reviews are what review farms produce; `usableReviewText`
+  in `extract.js` drops anything under `minReviewWords`/`minReviewChars`.
+  `reviewStats` reports the population *before* filtering, because "428 ratings,
+  5 with text" and "5 ratings, all with text" are different signals that the
+  survivors alone cannot distinguish. Near-identical reviews are sent once and
+  counted in `duplicateGroups`.
+- **Few usable reviews is missing evidence, not fraud.** The prompt says so in
+  capitals, and `reviewCredibility` should sit near 50 in that case.
 - **A failed analysis must surface as `UNAVAILABLE`, never a neutral score.** A
   trust product must not imply "fine" when it means "unknown".
 - Backend calls go through the **service worker**, not the content script

@@ -44,6 +44,8 @@ async function callApi(listing) {
         specs: listing.specs,
         imageUrls: listing.imageUrls,
         reviewImageUrls: listing.reviewImageUrls,
+        reviews: listing.reviews,
+        reviewStats: listing.reviewStats,
       }),
       signal: controller.signal,
     });

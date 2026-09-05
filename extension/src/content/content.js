@@ -103,6 +103,10 @@
       }
       .ref-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .ref-implies { color: #0f172a; font-weight: 600; flex: none; }
+      .rv-flag {
+        margin-top: 8px; padding: 7px 9px; border-radius: 6px;
+        background: #fef2f2; color: #991b1b; font-size: 11px;
+      }
       .spinner {
         width: 16px; height: 16px; border-radius: 50%;
         border: 2px solid #cbd5e1; border-top-color: #475569;
@@ -243,6 +247,34 @@
       </div>`;
   }
 
+  /**
+   * What buyers said. Only reviews with real text reach the model — one and
+   * two word reviews are dropped upstream — so a low count here means thin
+   * evidence, not a bad product.
+   */
+  function renderReviews(result) {
+    const ra = result.reviewAnalysis;
+    if (!ra) return "";
+
+    const themes = (ra.complaintThemes || [])
+      .map((c) => `<li>${escapeHtml(c)}</li>`)
+      .join("");
+
+    const flag = ra.suspectedFakeReviews
+      ? '<div class="rv-flag">Reviews show signs of being fabricated</div>'
+      : "";
+
+    return `
+      <div class="size">
+        <div class="size-note">
+          <b>${ra.usableReviewCount} review${ra.usableReviewCount === 1 ? "" : "s"}
+          with usable text.</b> ${escapeHtml(ra.explanation || "")}
+        </div>
+        ${themes ? `<h4>Recurring complaints</h4><ul>${themes}</ul>` : ""}
+        ${flag}
+      </div>`;
+  }
+
   function renderResult(shadow, result) {
     const p = presentation(result.riskLevel);
     const s = result.subScores || {};
@@ -269,7 +301,9 @@
           ${bar("Spec consistency", s.specConsistency ?? 0, p.color)}
           ${bar("Price sanity", s.priceSanity ?? 0, p.color)}
           ${bar("Scale fidelity", s.scaleFidelity ?? 0, p.color)}
+          ${bar("Review credibility", s.reviewCredibility ?? 0, p.color)}
           ${renderSize(result)}
+          ${renderReviews(result)}
           ${findings ? `<h4>Findings</h4><ul>${findings}</ul>` : ""}
           ${discrepancies ? `<h4>Spec discrepancies</h4><ul>${discrepancies}</ul>` : ""}
           <div class="muted">

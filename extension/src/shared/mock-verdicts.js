@@ -17,6 +17,7 @@
         specConsistency: 90,
         priceSanity: 82,
         scaleFidelity: 86,
+        reviewCredibility: 84,
       },
       scaleAnalysis: {
         identifiedProduct: "wireless earbuds charging case",
@@ -31,6 +32,14 @@
         mismatchDetected: false,
         explanation:
           "A review photo shows the case in an adult hand at about 6 cm, and a second photo beside a keyboard agrees. Both match the listed size.",
+      },
+      reviewAnalysis: {
+        usableReviewCount: 11,
+        complaintThemes: [],
+        contradictsListing: false,
+        suspectedFakeReviews: false,
+        explanation:
+          "Eleven reviews carried real text, mentioning specific details and varying in phrasing — what genuine feedback looks like.",
       },
       findings: [
         "Gallery images and customer review photos show a consistent product.",
@@ -54,6 +63,7 @@
         specConsistency: 38,
         priceSanity: 61,
         scaleFidelity: 50,
+        reviewCredibility: 45,
       },
       scaleAnalysis: {
         identifiedProduct: "floor-standing air purifier",
@@ -69,6 +79,17 @@
         mismatchDetected: true,
         explanation:
           "The person and doorway both put the unit near 90 cm, but the wall socket implies only 34 cm. No single real photograph can satisfy both, so the product was likely composited into the room scene.",
+      },
+      reviewAnalysis: {
+        usableReviewCount: 6,
+        complaintThemes: [
+          "unit smaller than it looks in the listing photos",
+          "feels like plastic despite the aluminium claim",
+        ],
+        contradictsListing: true,
+        suspectedFakeReviews: false,
+        explanation:
+          "Six reviews had usable text and read as genuine, but two independently describe a smaller, cheaper-feeling product than the listing implies.",
       },
       findings: [
         "Title claims 'aluminium body' while the spec table says ABS plastic.",
@@ -95,6 +116,7 @@
         specConsistency: 20,
         priceSanity: 19,
         scaleFidelity: 8,
+        reviewCredibility: 9,
       },
       scaleAnalysis: {
         identifiedProduct: "artificial Christmas tree",
@@ -110,6 +132,17 @@
         mismatchDetected: true,
         explanation:
           "The gallery stages the tree beside a sofa, implying 175 cm. Every review photo disagrees: 22 cm against a hand, 24 cm against a dining table. The review photos agree with each other, so the gallery is staged to make a desk ornament look like furniture.",
+      },
+      reviewAnalysis: {
+        usableReviewCount: 4,
+        complaintThemes: [
+          "received a tiny desk ornament, not a floor tree",
+          "nothing like the photos",
+        ],
+        contradictsListing: true,
+        suspectedFakeReviews: true,
+        explanation:
+          "Only 4 of 312 reviews carried real text, all describing a hand-sized ornament. The rest are empty or one-word praise with repeated phrasings — a review farm padding the score.",
       },
       findings: [
         "Listing implies a 180 cm tree, but review photos show buyers holding a 22 cm version in one hand.",

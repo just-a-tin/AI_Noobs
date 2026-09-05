@@ -26,7 +26,7 @@ is set up for a bait-and-switch: attractive imagery and specifications \
 advertising one product, with a cheaper or counterfeit item actually shipped.
 
 Evaluate the listing across these dimensions and populate the diagnostic flags. \
-Score four dimensions independently, 0-100, where 100 is entirely trustworthy:
+Score five dimensions independently, 0-100, where 100 is entirely trustworthy:
 
 1. VISUAL INTEGRITY - Are the gallery images genuine photographs of the product \
 being sold? Look for generative-AI artefacts (malformed text on packaging, \
@@ -92,8 +92,27 @@ rounding are not fraud. A listing whose only images are plain white-background \
 studio shots with nothing for scale is very common and is not by itself \
 suspicious - it is simply undeterminable.
 
+5. REVIEW CREDIBILITY - What do buyers actually say? Written reviews are \
+the only place a purchaser reports what really arrived, so they are the \
+strongest textual counter-evidence to a seller's own description. Look for \
+recurring substantive complaints - wrong size, wrong brand, missing parts, \
+empty or expired stock, 'not as pictured' - and weigh a theme repeated by \
+several independent buyers far more heavily than one unhappy customer.
+
+   Judge whether the reviews themselves look genuine. Near-identical \
+wording across reviews, uniformly generic praise naming no specific \
+feature, or text unrelated to this product all indicate a review farm. The \
+review population is described below: note especially how many reviews \
+carried no usable text, since hundreds of ratings with almost no written \
+content is a different thing from a handful of detailed reviews.
+
+   Only reviews long enough to be meaningful are shown to you; one and two \
+word reviews have already been discarded as uninformative. A SMALL NUMBER \
+OF USABLE REVIEWS IS NOT EVIDENCE OF FRAUD - it is missing evidence. Score \
+reviewCredibility near 50 and say so.
+
 Then set overallTrustScore as a holistic judgement. It should broadly reflect \
-the four sub-scores, weighted by which evidence is strongest, rather than a \
+the five sub-scores, weighted by which evidence is strongest, rather than a \
 strict average. A confirmed scale mismatch is strong evidence of deliberate \
 deception and should weigh heavily; an undeterminable scale should not.
 
@@ -151,6 +170,43 @@ def _describe_listing(req: AnalyzeRequest, images: list[PreparedImage]) -> str:
         "versus apparent size only."
     )
 
+    # Reviews are the one place a buyer says what actually arrived. The stats
+    # matter as much as the text: hundreds of ratings with almost no written
+    # content is a different signal from a handful of detailed reviews.
+    # Reviews are the one place a buyer says what actually arrived. The stats
+    # matter as much as the text: hundreds of ratings with almost no written
+    # content is a different signal from a handful of detailed reviews.
+    stats = req.reviewStats
+    if req.reviews:
+        rendered = []
+        for r in req.reviews:
+            stars = f"{r.rating}/5" if r.rating is not None else "no rating"
+            photo = ", with photo" if r.hasImages else ""
+            rendered.append(f'  - [{stars}{photo}] "{r.text}"')
+
+        extras = ""
+        if stats and stats.duplicateGroups:
+            extras += f"; {stats.duplicateGroups} group(s) of near-identical reviews"
+        if stats and stats.averageRating is not None:
+            extras += f"; average rating {stats.averageRating}"
+
+        counted = (
+            f"{stats.usable} of {stats.totalFound} carried usable text, "
+            f"{stats.discardedTooShort} were empty or too short to be informative"
+            if stats
+            else f"{len(req.reviews)} shown"
+        )
+        joined = "\n".join(rendered)
+        reviews_block = f"\nCUSTOMER REVIEWS ({counted}{extras}):\n{joined}"
+    elif stats and stats.totalFound:
+        reviews_block = (
+            f"\nCUSTOMER REVIEWS: {stats.totalFound} found, but none carried "
+            "text long enough to be informative. Treat this as missing "
+            "evidence, not as a finding."
+        )
+    else:
+        reviews_block = "\nCUSTOMER REVIEWS: none could be retrieved."
+
     return f"""\
 Analyse this {req.platform.value} listing.
 
@@ -161,7 +217,8 @@ Shop location: {req.shopLocation or "unknown"}
 Specifications:
 {specs}
 {claimed}
-{manifest}"""
+{manifest}
+{reviews_block}"""
 
 
 class BedrockAnalyzer:

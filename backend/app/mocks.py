@@ -20,6 +20,7 @@ import re
 
 from .schemas import (
     AnalysisCore,
+    ReviewAnalysis,
     AnalyzeRequest,
     ImageAnalysis,
     ReferenceAgreement,
@@ -32,7 +33,11 @@ from .schemas import (
 _CLEAN = AnalysisCore(
     overallTrustScore=88,
     subScores=SubScores(
-        visualIntegrity=92, specConsistency=90, priceSanity=82, scaleFidelity=86
+        visualIntegrity=92,
+        specConsistency=90,
+        priceSanity=82,
+        scaleFidelity=86,
+        reviewCredibility=84,
     ),
     scaleAnalysis=ScaleAnalysis(
         identifiedProduct="wireless earbuds charging case",
@@ -60,6 +65,18 @@ _CLEAN = AnalysisCore(
             "dimensions and with normal size for this product."
         ),
     ),
+    reviewAnalysis=ReviewAnalysis(
+        usableReviewCount=11,
+        complaintThemes=[],
+        contradictsListing=False,
+        suspectedFakeReviews=False,
+        explanation=(
+            "Eleven reviews carried substantive text. They mention specific "
+            "details — battery life, case size, fit in the ear — and vary in "
+            "phrasing and sentiment, which is what genuine buyer feedback "
+            "looks like. Nothing contradicts the listing."
+        ),
+    ),
     findings=[
         "Gallery images and customer review photos show a consistent product.",
         "Listed weight and dimensions agree with the manufacturer's published specs.",
@@ -81,7 +98,11 @@ _CLEAN = AnalysisCore(
 _SPEC_MISMATCH = AnalysisCore(
     overallTrustScore=58,
     subScores=SubScores(
-        visualIntegrity=74, specConsistency=38, priceSanity=61, scaleFidelity=50
+        visualIntegrity=74,
+        specConsistency=38,
+        priceSanity=61,
+        scaleFidelity=50,
+        reviewCredibility=45,
     ),
     scaleAnalysis=ScaleAnalysis(
         identifiedProduct="floor-standing air purifier",
@@ -115,6 +136,21 @@ _SPEC_MISMATCH = AnalysisCore(
             "composited into a room scene at an exaggerated size."
         ),
     ),
+    reviewAnalysis=ReviewAnalysis(
+        usableReviewCount=6,
+        complaintThemes=[
+            "unit smaller than it appears in the listing photos",
+            "build feels like plastic despite the aluminium claim",
+        ],
+        contradictsListing=True,
+        suspectedFakeReviews=False,
+        explanation=(
+            "Six reviews had usable text and read as genuine, but two "
+            "independently describe the product as smaller and cheaper-feeling "
+            "than the listing implies. That is corroboration of the spec "
+            "mismatch rather than evidence of review manipulation."
+        ),
+    ),
     findings=[
         "Objects in the main image contradict each other: a person and a "
         "doorway imply a 90 cm unit, while the wall socket implies 34 cm. The "
@@ -142,7 +178,11 @@ _SPEC_MISMATCH = AnalysisCore(
 _BAIT_AND_SWITCH = AnalysisCore(
     overallTrustScore=17,
     subScores=SubScores(
-        visualIntegrity=12, specConsistency=20, priceSanity=19, scaleFidelity=8
+        visualIntegrity=12,
+        specConsistency=20,
+        priceSanity=19,
+        scaleFidelity=8,
+        reviewCredibility=9,
     ),
     scaleAnalysis=ScaleAnalysis(
         identifiedProduct="artificial Christmas tree",
@@ -176,6 +216,21 @@ _BAIT_AND_SWITCH = AnalysisCore(
             "story: against a hand it is 22 cm, against a dining table 24 cm. "
             "The review photos agree with each other, so the gallery is "
             "staged to make a desk ornament look like full-sized furniture."
+        ),
+    ),
+    reviewAnalysis=ReviewAnalysis(
+        usableReviewCount=4,
+        complaintThemes=[
+            "received a tiny desk ornament, not a floor-standing tree",
+            "nothing like the photos",
+        ],
+        contradictsListing=True,
+        suspectedFakeReviews=True,
+        explanation=(
+            "Only 4 of 312 reviews carried real text, and those describe "
+            "receiving a hand-sized ornament. The remaining ratings are empty "
+            "or one-word praise, with several near-identical phrasings — the "
+            "signature of a review farm padding the score."
         ),
     ),
     findings=[

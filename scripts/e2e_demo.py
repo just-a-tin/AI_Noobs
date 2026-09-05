@@ -115,6 +115,7 @@ def main() -> int:
     print(f"    Spec consistency  {s['specConsistency']:>3}")
     print(f"    Price sanity      {s['priceSanity']:>3}")
     print(f"    Scale fidelity    {s['scaleFidelity']:>3}\n")
+    print(f"    Review credibility {s['reviewCredibility']:>2}")
 
     sa = result["scaleAnalysis"]
     print(f"{DIM}    Real-world size{RESET}")
@@ -143,6 +144,15 @@ def main() -> int:
                 )
     print(f"{DIM}    {sa['explanation']}{RESET}\n")
 
+    ra = result["reviewAnalysis"]
+    print(f"{DIM}    Customer reviews{RESET}")
+    print(f"    {ra['usableReviewCount']} with usable text"
+          + ("  [SUSPECTED FAKE]" if ra["suspectedFakeReviews"] else "")
+          + ("  [CONTRADICTS LISTING]" if ra["contradictsListing"] else ""))
+    for theme in ra["complaintThemes"]:
+        print(f"      ! {theme}")
+    print(f"{DIM}    {ra['explanation']}{RESET}\n")
+
     for finding in result["findings"]:
         print(f"    • {finding}")
     if result["specDiscrepancies"]:
@@ -166,7 +176,7 @@ def main() -> int:
                 result["riskLevel"] == derive_risk_level(result["overallTrustScore"]).value,
             ),
             check("findings present", bool(result["findings"])),
-            check("sub-scores present for UI breakdown", len(s) == 4),
+            check("sub-scores present for UI breakdown", len(s) == 5),
             check(
                 "claimed size parsed from specs",
                 result.get("listedLongestCm") is not None,
@@ -174,6 +184,10 @@ def main() -> int:
             check(
                 "scale estimate is null unless a reference was found",
                 (sa["scaleConfidence"] == "NONE") == (sa["apparentLongestCm"] is None),
+            ),
+            check(
+                "review analysis returned",
+                isinstance(ra.get("usableReviewCount"), int),
             ),
             check(
                 "scene references reported per object",

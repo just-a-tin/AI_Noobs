@@ -8,6 +8,7 @@ from app.schemas import (
     AnalyzeRequest,
     ImageAnalysis,
     ReferenceAgreement,
+    ReviewAnalysis,
     RiskLevel,
     ScaleAnalysis,
     ScaleConfidence,
@@ -39,6 +40,7 @@ def make_result(score: int = 80) -> AnalysisResult:
             specConsistency=score,
             priceSanity=score,
             scaleFidelity=score,
+            reviewCredibility=score,
         ),
         scaleAnalysis=ScaleAnalysis(
             identifiedProduct="wireless earbuds",
@@ -53,6 +55,13 @@ def make_result(score: int = 80) -> AnalysisResult:
             apparentLongestCm=6.1,
             mismatchDetected=False,
             explanation="Matches expected size.",
+        ),
+        reviewAnalysis=ReviewAnalysis(
+            usableReviewCount=3,
+            complaintThemes=[],
+            contradictsListing=False,
+            suspectedFakeReviews=False,
+            explanation="Reviews read as genuine.",
         ),
         findings=["ok"],
         imageAnalysis=ImageAnalysis(

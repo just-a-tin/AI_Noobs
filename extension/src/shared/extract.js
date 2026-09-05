@@ -80,6 +80,168 @@
     };
   }
 
+  /**
+   * The heading that starts the customer-review section.
+   *
+   * Splits the page in two: product imagery above it, buyer photos and
+   * review text below. Matched on heading TEXT, not class names, which
+   * Shopee obfuscates and rotates.
+   */
+  function findReviewAnchor() {
+    const reviewHeadingRe = /\b(review|rating|ulasan|penilaian)\b/i;
+    for (const el of document.querySelectorAll(
+      "h1,h2,h3,h4,section,div[class],[role='heading']"
+    )) {
+      const own = (el.childElementCount ? "" : el.textContent || "").trim();
+      if (own && own.length < 60 && reviewHeadingRe.test(own)) return el;
+    }
+    return null;
+  }
+
+  // --- Reviews --------------------------------------------------------------
+
+  /**
+   * Normalise one review's text, or reject it.
+   *
+   * Empty and one-or-two-word reviews are discarded: "ok", "good", "fast
+   * delivery" say nothing about whether the product matches its listing, and
+   * they are exactly what review farms mass-produce. Requiring a real sentence
+   * keeps the evidence and cuts the token bill.
+   */
+  function usableReviewText(raw) {
+    const text = String(raw || "").replace(/\s+/g, " ").trim();
+    if (text.length < config.minReviewChars) return null;
+    if (text.split(" ").filter(Boolean).length < config.minReviewWords) return null;
+    return text;
+  }
+
+  /** Collapse a review to a comparable form, for spotting repeats. */
+  function reviewFingerprint(text) {
+    return text
+      .toLowerCase()
+      .replace(/[^a-z0-9 ]/g, "")
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 12)
+      .join(" ");
+  }
+
+  /**
+   * Turn raw rating records into the payload's reviews plus population stats.
+   *
+   * The stats describe what existed *before* filtering, because "400 reviews
+   * of which 6 have text" and "6 reviews all with text" mean very different
+   * things, and the survivors alone cannot distinguish them.
+   */
+  function summariseReviews(records) {
+    const stats = {
+      totalFound: records.length,
+      usable: 0,
+      discardedTooShort: 0,
+      duplicateGroups: 0,
+      averageRating: null,
+    };
+
+    const stars = records.map((r) => r.rating).filter((n) => typeof n === "number");
+    if (stars.length) {
+      stats.averageRating =
+        Math.round((stars.reduce((a, b) => a + b, 0) / stars.length) * 10) / 10;
+    }
+
+    const byFingerprint = new Map();
+    const kept = [];
+
+    for (const record of records) {
+      const text = usableReviewText(record.text);
+      if (!text) {
+        stats.discardedTooShort += 1;
+        continue;
+      }
+
+      const fp = reviewFingerprint(text);
+      const count = (byFingerprint.get(fp) || 0) + 1;
+      byFingerprint.set(fp, count);
+
+      // Send one copy of a repeated review; the repetition is reported via
+      // duplicateGroups rather than by paying to send it many times.
+      if (count === 1 && kept.length < config.maxReviews) {
+        kept.push({
+          text: text.slice(0, 600),
+          rating: typeof record.rating === "number" ? record.rating : null,
+          hasImages: Boolean(record.hasImages),
+        });
+      }
+    }
+
+    stats.usable = kept.length;
+    stats.duplicateGroups = [...byFingerprint.values()].filter((n) => n > 1).length;
+    return { reviews: kept, reviewStats: stats };
+  }
+
+  /**
+   * Shopee's ratings endpoint: review text, stars, and buyer photos.
+   *
+   * Also the correct source for review images — DOM scraping cannot reliably
+   * tell a buyer's photo from a page banner, but this endpoint attributes them
+   * per review.
+   */
+  async function fromRatingsApi({ itemId, shopId }) {
+    const url = config.ratingsApiTemplate
+      .replace("{itemId}", itemId)
+      .replace("{shopId}", shopId)
+      .replace("{limit}", String(config.ratingsToFetch));
+
+    const response = await fetch(url, {
+      credentials: "include",
+      headers: { "x-api-source": "pc", "x-requested-with": "XMLHttpRequest" },
+    });
+    if (!response.ok) throw new Error(`ratings API ${response.status}`);
+
+    const body = await response.json();
+    const ratings = body?.data?.ratings;
+    if (!Array.isArray(ratings)) throw new Error("ratings API returned no list");
+
+    const records = ratings.map((r) => ({
+      text: r?.comment,
+      rating: r?.rating_star,
+      hasImages: Array.isArray(r?.images) && r.images.length > 0,
+    }));
+
+    const images = [];
+    for (const r of ratings) {
+      for (const hash of r?.images ?? []) {
+        if (images.length >= config.maxReviewImages) break;
+        const u = imageUrl(hash);
+        if (u) images.push(u);
+      }
+    }
+
+    return { ...summariseReviews(records), reviewImageUrls: images };
+  }
+
+  /** Last resort: pull review paragraphs out of the DOM. */
+  function reviewsFromDom() {
+    const anchorEl = findReviewAnchor();
+    if (!anchorEl) return { reviews: [], reviewStats: null };
+
+    const records = [];
+    const seen = new Set();
+    for (const el of document.querySelectorAll("div, p, span, li")) {
+      const after =
+        anchorEl.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING;
+      if (!after) continue;
+      // Innermost text only: a container would swallow the whole section.
+      if (el.childElementCount > 0) continue;
+
+      const text = (el.textContent || "").trim();
+      if (text.length < config.minReviewChars || text.length > 800) continue;
+      if (seen.has(text)) continue;
+      seen.add(text);
+      records.push({ text, rating: null, hasImages: false });
+    }
+    return summariseReviews(records);
+  }
+
 // --- Layer 2: DOM fallback -----------------------------------------------
 
   /** Extract pristine data from hidden SEO JSON-LD tags */
@@ -238,17 +400,7 @@
    * document order as a review photo.
    */
   function scrapeImages() {
-    const reviewHeadingRe = /\b(review|rating|ulasan|penilaian)\b/i;
-    let reviewAnchor = null;
-    for (const el of document.querySelectorAll(
-      "h1,h2,h3,h4,section,div[class],[role='heading']"
-    )) {
-      const own = (el.childElementCount ? "" : el.textContent || "").trim();
-      if (own && own.length < 60 && reviewHeadingRe.test(own)) {
-        reviewAnchor = el;
-        break;
-      }
-    }
+    const reviewAnchor = findReviewAnchor();
 
     const gallery = [];
     const review = [];
@@ -320,10 +472,30 @@
     if (!ids) return null;
 
     let listing = null;
+    let apiError = null;
     try {
       listing = await fromPdpApi(ids);
     } catch (err) {
-      console.debug("[Sentinel] PDP API unavailable, falling back to DOM:", err);
+      // console.warn, not console.debug: Chrome hides Verbose by default, so a
+      // debug-level failure is invisible exactly when someone is trying to
+      // work out why nothing happened.
+      apiError = String(err?.message || err);
+      console.warn("[Sentinel] PDP API unavailable, falling back to DOM:", apiError);
+    }
+
+    // Written reviews are the one place a buyer says what actually arrived.
+    // The ratings endpoint also attributes buyer photos per review, which DOM
+    // scraping cannot do reliably.
+    let reviewData = { reviews: [], reviewStats: null, reviewImageUrls: [] };
+    try {
+      reviewData = await fromRatingsApi(ids);
+    } catch (err) {
+      console.warn("[Sentinel] ratings API unavailable, scraping DOM:", String(err));
+      try {
+        reviewData = { ...reviewsFromDom(), reviewImageUrls: [] };
+      } catch (domErr) {
+        console.warn("[Sentinel] DOM review scrape failed:", String(domErr));
+      }
     }
 
     // The API can succeed but omit fields; fill gaps from the DOM rather than
@@ -343,6 +515,11 @@
       }
     }
 
+    // Ratings-API photos are correctly attributed, so they win outright.
+    if (reviewData.reviewImageUrls?.length) {
+      listing.reviewImageUrls = reviewData.reviewImageUrls;
+    }
+
     // --- NEW RETRY LOGIC: Wait for Shopee to load the JSON-LD ---
     if (!listing.title || listing.price == null) {
       if (retries > 0) {
@@ -350,11 +527,24 @@
         await new Promise(resolve => setTimeout(resolve, 800)); // wait 800ms
         return extractListing(retries - 1); // Try again
       }
-      console.debug("[Sentinel] listing incomplete after retries", listing);
+      console.warn("[Sentinel] could not read this listing", {
+        missing: [
+          !listing.title && "title",
+          listing.price == null && "price",
+        ].filter(Boolean),
+        source: listing.source,
+        pdpApiError: apiError,
+        ids,
+        sawTitle: listing.title || null,
+        sawPrice: listing.price,
+        specCount: Object.keys(listing.specs || {}).length,
+        galleryImages: (listing.imageUrls || []).length,
+        url: location.href,
+      });
       return null;
     }
 
-    return {
+    const payload = {
       platform: "shopee",
       itemId: listing.itemId,
       shopId: listing.shopId,
@@ -366,8 +556,22 @@
       specs: listing.specs,
       imageUrls: listing.imageUrls,
       reviewImageUrls: listing.reviewImageUrls,
+      reviews: reviewData.reviews,
+      reviewStats: reviewData.reviewStats,
       _source: listing.source,
     };
+
+    const s = reviewData.reviewStats;
+    console.info(
+      `[Sentinel] read listing via ${listing.source}:`,
+      `"${listing.title.slice(0, 50)}"`,
+      `$${listing.price}`,
+      `${payload.imageUrls.length} gallery / ${payload.reviewImageUrls.length} review images`,
+      s
+        ? `${s.usable}/${s.totalFound} reviews usable (${s.discardedTooShort} too short)`
+        : "no reviews"
+    );
+    return payload;
   }
 
   root.Sentinel.extract = { parseProductUrl, extractListing, fromDom };

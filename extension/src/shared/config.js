@@ -22,6 +22,24 @@
     pdpApiTemplate:
       "https://shopee.sg/api/v4/pdp/get_pc?item_id={itemId}&shop_id={shopId}",
 
+    /** Written reviews, with their images correctly attributed. */
+    ratingsApiTemplate:
+      "https://shopee.sg/api/v4/item/get_ratings?filter=0&flag=1" +
+      "&itemid={itemId}&shopid={shopId}&type=0&limit={limit}&offset=0",
+
+    /**
+     * Review text filtering.
+     *
+     * Empty and one-or-two-word reviews ("ok", "good", "nice") carry almost no
+     * information about whether the product is what it claims to be, and they
+     * are what review farms produce in bulk. Requiring a real sentence keeps
+     * the signal and cuts the token cost.
+     */
+    minReviewWords: 5,
+    minReviewChars: 20,
+    maxReviews: 15,
+    ratingsToFetch: 50,
+
     /** Shopee stores image hashes; the CDN URL is built from them. */
     imageCdnBase: "https://down-sg.img.susercontent.com/file/",
 

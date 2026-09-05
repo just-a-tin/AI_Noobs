@@ -89,6 +89,31 @@
       }`;
   }
 
+  /** What buyers actually reported receiving. */
+  function renderReviews(result) {
+    const ra = result.reviewAnalysis;
+    if (!ra) return "";
+
+    const themes = (ra.complaintThemes || [])
+      .map((c) => `<li>${esc(c)}</li>`)
+      .join("");
+
+    return `
+      <h4>What buyers say</h4>
+      <div class="size ${ra.contradictsListing ? "mismatch" : "match"}">
+        <div class="size-why">
+          <b>${ra.usableReviewCount} review${ra.usableReviewCount === 1 ? "" : "s"}
+          with usable text.</b> ${esc(ra.explanation)}
+        </div>
+      </div>
+      ${themes ? `<h4>Recurring complaints</h4><ul>${themes}</ul>` : ""}
+      ${
+        ra.suspectedFakeReviews
+          ? '<div class="flag"><span>⚠</span><span>Reviews show signs of being fabricated.</span></div>'
+          : ""
+      }`;
+  }
+
   function render(entry) {
     const { result, listing } = entry;
     const p = presentation(result.riskLevel);
@@ -117,8 +142,10 @@
       ${bar("Spec consistency", s.specConsistency, p.color)}
       ${bar("Price sanity", s.priceSanity, p.color)}
       ${bar("Scale fidelity", s.scaleFidelity, p.color)}
+      ${bar("Review credibility", s.reviewCredibility, p.color)}
 
       ${renderSize(result)}
+      ${renderReviews(result)}
 
       ${findings ? `<h4>Findings</h4><ul>${findings}</ul>` : ""}
       ${discrepancies ? `<h4>Spec discrepancies</h4><ul>${discrepancies}</ul>` : ""}

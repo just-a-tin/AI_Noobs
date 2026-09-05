@@ -26,6 +26,29 @@ class RiskLevel(str, Enum):
     HIGH = "HIGH"
 
 
+class CustomerReview(BaseModel):
+    """One buyer review, already filtered for usefulness by the extension."""
+
+    text: str
+    rating: int | None = None
+    hasImages: bool = False
+
+
+class ReviewStats(BaseModel):
+    """What the review population looked like before filtering.
+
+    The model needs the shape of what was discarded, not just what survived:
+    a listing with 400 reviews of which 6 carry real text reads very
+    differently from one with 6 reviews all of which do.
+    """
+
+    totalFound: int = 0
+    usable: int = 0
+    discardedTooShort: int = 0
+    duplicateGroups: int = 0
+    averageRating: float | None = None
+
+
 class AnalyzeRequest(BaseModel):
     platform: Platform = Platform.SHOPEE
     itemId: str
@@ -40,6 +63,8 @@ class AnalyzeRequest(BaseModel):
     specs: dict[str, str] = Field(default_factory=dict)
     imageUrls: list[HttpUrl] = Field(default_factory=list)
     reviewImageUrls: list[HttpUrl] = Field(default_factory=list)
+    reviews: list["CustomerReview"] = Field(default_factory=list)
+    reviewStats: "ReviewStats | None" = None
 
     def cache_key(self) -> str:
         return f"{self.platform.value}#{self.itemId}"
@@ -116,6 +141,46 @@ class SceneReference(BaseModel):
         description=(
             "How big the product would have to be, in cm, if this reference "
             "is correct. Derived from their relative sizes in the image."
+        )
+    )
+
+
+class ReviewAnalysis(BaseModel):
+    """What the written reviews say, and whether they can be trusted.
+
+    Reviews are the one place a buyer says what actually arrived, so they are
+    the strongest textual counter-evidence to a seller's own description.
+    """
+
+    usableReviewCount: int = Field(
+        description="How many reviews carried enough text to be worth reading."
+    )
+    complaintThemes: list[str] = Field(
+        description=(
+            "Recurring substantive complaints, each a short phrase (e.g. "
+            "'arrived much smaller than pictured', 'bottle half empty', "
+            "'different brand than advertised'). Empty if none recur."
+        )
+    )
+    contradictsListing: bool = Field(
+        description=(
+            "True if reviewers describe receiving something materially "
+            "different from what the listing advertises — wrong size, wrong "
+            "brand, wrong product, or missing parts."
+        )
+    )
+    suspectedFakeReviews: bool = Field(
+        description=(
+            "True only on positive evidence of manipulation: near-identical "
+            "wording repeated across reviews, generic praise that names no "
+            "specific feature, or text unrelated to this product. Few reviews "
+            "is not evidence; fabricated ones are."
+        )
+    )
+    explanation: str = Field(
+        description=(
+            "Two or three sentences on what the reviews show. If too few had "
+            "usable text, say that plainly instead of inferring from silence."
         )
     )
 
@@ -227,6 +292,17 @@ class SubScores(BaseModel):
             "alone is not fraud; weigh it with the other evidence."
         ),
     )
+    reviewCredibility: int = Field(
+        ge=0,
+        le=100,
+        description=(
+            "0-100. Do the written reviews read like real buyers? Low when "
+            "they are repetitive, generic, implausibly uniform, or describe a "
+            "different product from the listing. Use 50 when too few reviews "
+            "carry usable text to judge — an absence of reviews is not "
+            "evidence of fraud."
+        ),
+    )
     scaleFidelity: int = Field(
         ge=0,
         le=100,
@@ -255,6 +331,7 @@ class AnalysisCore(BaseModel):
     )
     subScores: SubScores
     scaleAnalysis: ScaleAnalysis
+    reviewAnalysis: ReviewAnalysis
     findings: list[str] = Field(
         description=(
             "Specific, concrete observations a shopper could verify themselves. "
