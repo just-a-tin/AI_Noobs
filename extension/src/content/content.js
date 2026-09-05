@@ -271,7 +271,9 @@
     if (token !== currentToken) return; // navigated away mid-flight
 
     if (!listing) {
-      renderError(shadow, "Could not read this listing's details");
+      // The console line names the missing field; point at it rather than
+      // leaving a dead end.
+      renderError(shadow, "Couldn't read this listing — see console for details");
       return;
     }
 

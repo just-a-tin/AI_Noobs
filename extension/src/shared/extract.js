@@ -94,43 +94,57 @@
     return best ? best.text : document.title.replace(/\s*\|\s*Shopee.*$/i, "");
   }
 
-  /** Find SGD amounts by text shape, then take the most prominent. */
+  /**
+   * Find SGD amounts by text shape, then take the most prominent.
+   *
+   * Scans ELEMENTS, not text nodes. Shopee renders the currency symbol in its
+   * own element (`<span>$</span><span>12.90</span>`), so no single text node
+   * ever contains "$12.90" and a text-node scan silently finds no price at
+   * all. An element's textContent joins its children back together.
+   */
   function scrapePrices() {
-    const priceRe = /(?:S\$|\$)\s?([\d,]+(?:\.\d{1,2})?)/;
+    // Optional decimals: Shopee shows whole-dollar prices without them.
+    const priceRe = /(?:S\$|SGD|\$)\s?([\d,]+(?:\.\d{1,2})?)/;
     const found = [];
 
-    const walker = document.createTreeWalker(
-      document.body,
-      NodeFilter.SHOW_TEXT
-    );
-    let node;
-    while ((node = walker.nextNode())) {
-      const text = node.nodeValue?.trim();
-      if (!text || text.length > 40) continue;
+    for (const el of document.body.querySelectorAll("*")) {
+      const text = (el.textContent || "").trim();
+      // Keep it tight: a match on a wrapper div would inherit the whole page.
+      if (!text || text.length > 30) continue;
+
       const m = priceRe.exec(text);
       if (!m) continue;
 
       const value = parseFloat(m[1].replace(/,/g, ""));
       if (!Number.isFinite(value) || value <= 0) continue;
 
-      const el = node.parentElement;
-      const size = el ? parseFloat(getComputedStyle(el).fontSize) || 0 : 0;
-      const struck =
-        el && /line-through/.test(getComputedStyle(el).textDecorationLine);
-      found.push({ value, size, struck });
+      const style = getComputedStyle(el);
+      if (style.display === "none" || style.visibility === "hidden") continue;
+
+      found.push({
+        value,
+        size: parseFloat(style.fontSize) || 0,
+        struck: /line-through/.test(style.textDecorationLine),
+        textLen: text.length,
+      });
     }
+
     if (!found.length) return { price: null, originalPrice: null };
 
-    const current = found
-      .filter((f) => !f.struck)
-      .sort((a, b) => b.size - a.size)[0];
+    // Nested elements each match, so prefer the innermost (shortest text) at
+    // a given font size — that is the price itself, not its container.
+    const rank = (a, b) => b.size - a.size || a.textLen - b.textLen;
+
+    const current = found.filter((f) => !f.struck).sort(rank)[0];
     const original = found
       .filter((f) => f.struck)
       .sort((a, b) => b.value - a.value)[0];
 
+    const price = current ? current.value : found.sort(rank)[0].value;
     return {
-      price: current ? current.value : found[0].value,
-      originalPrice: original ? original.value : null,
+      price,
+      // A struck-through price below the current one is not a discount.
+      originalPrice: original && original.value > price ? original.value : null,
     };
   }
 
@@ -222,10 +236,15 @@
     if (!ids) return null;
 
     let listing = null;
+    let apiError = null;
     try {
       listing = await fromPdpApi(ids);
     } catch (err) {
-      console.debug("[Sentinel] PDP API unavailable, falling back to DOM:", err);
+      // console.warn, not console.debug: Chrome hides Verbose messages by
+      // default, so a debug-level failure log is invisible exactly when
+      // someone is trying to work out why nothing happened.
+      apiError = String(err?.message || err);
+      console.warn("[Sentinel] PDP API unavailable, falling back to DOM:", apiError);
     }
 
     // The API can succeed but omit fields; fill gaps from the DOM rather than
@@ -245,9 +264,32 @@
     }
 
     if (!listing.title || listing.price == null) {
-      console.debug("[Sentinel] listing incomplete", listing);
+      // Say precisely which field is missing and what was seen, so a broken
+      // page can be diagnosed from one pasted console line.
+      console.warn("[Sentinel] could not read this listing", {
+        missing: [
+          !listing.title && "title",
+          listing.price == null && "price",
+        ].filter(Boolean),
+        source: listing.source,
+        pdpApiError: apiError,
+        ids,
+        sawTitle: listing.title || null,
+        sawPrice: listing.price,
+        specCount: Object.keys(listing.specs || {}).length,
+        galleryImages: (listing.imageUrls || []).length,
+        reviewImages: (listing.reviewImageUrls || []).length,
+        url: location.href,
+      });
       return null;
     }
+
+    console.info(
+      `[Sentinel] read listing via ${listing.source}:`,
+      `"${listing.title.slice(0, 60)}"`,
+      `$${listing.price}`,
+      `${listing.imageUrls.length} gallery / ${listing.reviewImageUrls.length} review images`
+    );
 
     return {
       platform: "shopee",
@@ -266,4 +308,20 @@
   }
 
   root.Sentinel.extract = { parseProductUrl, extractListing, fromDom };
+
+  // Callable from DevTools (choose the "Sentinel" context in the console's
+  // top-left dropdown) to see exactly what each layer found on this page.
+  root.sentinelDebug = async function () {
+    const ids = parseProductUrl();
+    console.log("[Sentinel] url ids:", ids);
+    if (!ids) return console.log("[Sentinel] not a product URL");
+
+    try {
+      console.log("[Sentinel] PDP API:", await fromPdpApi(ids));
+    } catch (err) {
+      console.log("[Sentinel] PDP API failed:", String(err));
+    }
+    console.log("[Sentinel] DOM scrape:", fromDom(ids));
+    console.log("[Sentinel] final:", await extractListing());
+  };
 })(typeof self !== "undefined" ? self : globalThis);
