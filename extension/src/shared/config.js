@@ -31,6 +31,16 @@
     /** Shopee's v4 API returns prices scaled by 100_000. */
     priceScale: 100000,
 
-    requestTimeoutMs: 30000,
+    /**
+     * Real analysis is slow: measured 29-36s for 3-7 images against
+     * Claude Opus 4.6 at effort=high, before Shopee's larger images and
+     * variable model latency. The old 30s ceiling sat right on that boundary
+     * and aborted mid-flight. Generous headroom costs nothing — a request
+     * that is going to fail fails on its own.
+     */
+    requestTimeoutMs: 120000,
+
+    /** Show elapsed seconds after this, so a long wait doesn't look hung. */
+    showElapsedAfterMs: 4000,
   };
 })(typeof self !== "undefined" ? self : globalThis);

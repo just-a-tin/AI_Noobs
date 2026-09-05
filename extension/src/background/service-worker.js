@@ -20,7 +20,13 @@ async function remember(tabId, itemId, payload) {
 
 async function callApi(listing) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), config.requestTimeoutMs);
+  // Track our own timeout: an aborted fetch reports only "signal is aborted
+  // without reason", which tells the user nothing about what went wrong.
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, config.requestTimeoutMs);
 
   try {
     const response = await fetch(config.apiUrl + config.analyzePath, {
@@ -47,6 +53,17 @@ async function callApi(listing) {
       throw new Error(`API ${response.status}${detail ? `: ${detail.slice(0, 120)}` : ""}`);
     }
     return await response.json();
+  } catch (err) {
+    if (timedOut) {
+      throw new Error(
+        `Analysis timed out after ${Math.round(config.requestTimeoutMs / 1000)}s`
+      );
+    }
+    if (err instanceof TypeError) {
+      // fetch throws TypeError when it cannot reach the host at all.
+      throw new Error(`Cannot reach Sentinel API at ${config.apiUrl} — is it running?`);
+    }
+    throw err;
   } finally {
     clearTimeout(timer);
   }

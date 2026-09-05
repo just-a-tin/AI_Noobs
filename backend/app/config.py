@@ -66,6 +66,13 @@ class Settings:
         default_factory=lambda: float(os.getenv("CACHE_PRICE_TOLERANCE", "0.02"))
     )
     max_images: int = field(default_factory=lambda: int(os.getenv("MAX_IMAGES", "8")))
+
+    # Thinking depth, and the main latency lever: a full analysis measured
+    # ~36s at "high" with 7 images. Drop to "medium" or "low" if a live demo
+    # needs to feel quicker; raise to "max" when accuracy matters more.
+    effort: str = field(
+        default_factory=lambda: os.getenv("BEDROCK_EFFORT", "high").strip().lower()
+    )
     log_level: str = field(default_factory=lambda: os.getenv("LOG_LEVEL", "INFO"))
 
     @property

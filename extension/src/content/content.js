@@ -8,16 +8,22 @@
  * viewed and silently go stale.
  */
 (function () {
-  const { extract, presentation } = self.Sentinel;
+  const { config, extract, presentation } = self.Sentinel;
 
   const HOST_ID = "sentinel-badge-host";
   let currentHref = null;
   let currentToken = 0;
   let navTimer = null;
+  // Held module-wide so teardown can stop a ticker started in run().
+  let stopLoadingTicker = null;
 
   // --- Badge UI -------------------------------------------------------------
 
   function removeBadge() {
+    // Stop any running loading ticker first, or it repaints into a detached
+    // shadow root once a second for the life of the page.
+    stopLoadingTicker?.();
+    stopLoadingTicker = null;
     document.getElementById(HOST_ID)?.remove();
   }
 
@@ -120,16 +126,42 @@
     return div.innerHTML;
   }
 
+  /**
+   * Loading state with an elapsed counter.
+   *
+   * Real analysis takes 30-60s: several images are fetched, downscaled and
+   * reasoned over. A motionless spinner for that long reads as broken, and
+   * the user reloads and blames the extension.
+   *
+   * Returns a stop function; callers must invoke it before rendering.
+   */
   function renderLoading(shadow) {
-    shadow.innerHTML = `
-      <style>${styles()}</style>
-      <div class="wrap"><div class="pill">
-        <div class="spinner"></div>
-        <div class="headline">
-          <div class="score">Checking listing…</div>
-          <div class="label">Sentinel is analysing this product</div>
-        </div>
-      </div></div>`;
+    const started = Date.now();
+
+    const paint = () => {
+      const elapsed = Date.now() - started;
+      const secs = Math.floor(elapsed / 1000);
+      const note =
+        elapsed < config.showElapsedAfterMs
+          ? "Sentinel is analysing this product"
+          : `Inspecting images — ${secs}s (this can take up to a minute)`;
+
+      shadow.innerHTML = `
+        <style>${styles()}</style>
+        <div class="wrap"><div class="pill">
+          <div class="spinner"></div>
+          <div class="headline">
+            <div class="score">Checking listing…</div>
+            <div class="label">${note}</div>
+          </div>
+        </div></div>`;
+    };
+
+    paint();
+    const ticker = setInterval(paint, 1000);
+    const stop = () => clearInterval(ticker);
+    stopLoadingTicker = stop;
+    return stop;
   }
 
   function renderError(shadow, message) {
@@ -291,41 +323,45 @@
     }
 
     const shadow = createHost();
-    renderLoading(shadow);
+    // The loading ticker repaints once a second, so it MUST be stopped before
+    // anything else renders or it will overwrite the result a moment later.
+    const stopLoading = renderLoading(shadow);
+
+    const fail = (message) => {
+      stopLoading();
+      renderError(shadow, message);
+    };
 
     const listing = await extract.extractListing();
-    if (token !== currentToken) return; // navigated away mid-flight
+    if (token !== currentToken) return stopLoading(); // navigated away mid-flight
 
     if (!listing) {
       // The console line names the missing field; point at it rather than
       // leaving a dead end.
-      renderError(shadow, "Couldn't read this listing — see console for details");
-      return;
+      return fail("Couldn't read this listing — see console for details");
     }
 
     if (!contextAlive()) {
-      renderError(shadow, "Sentinel was updated — refresh this page");
-      shutdown();
-      return;
+      fail("Sentinel was updated — refresh this page");
+      return shutdown();
     }
 
     try {
       chrome.runtime.sendMessage({ type: "SENTINEL_ANALYZE", listing }, (reply) => {
-        if (token !== currentToken) return;
+        if (token !== currentToken) return stopLoading();
         if (chrome.runtime.lastError || !reply) {
-          renderError(shadow, "Sentinel background service is unavailable");
-          return;
+          return fail("Sentinel background service is unavailable");
         }
         if (!reply.ok) {
-          renderError(shadow, reply.error || "Analysis unavailable");
-          return;
+          return fail(reply.error || "Analysis unavailable");
         }
+        stopLoading();
         renderResult(shadow, reply.result);
       });
     } catch (err) {
       // The extension was reloaded between the check above and this call.
       console.warn("[Sentinel] messaging failed:", String(err));
-      renderError(shadow, "Sentinel was updated — refresh this page");
+      fail("Sentinel was updated — refresh this page");
       shutdown();
     }
   }

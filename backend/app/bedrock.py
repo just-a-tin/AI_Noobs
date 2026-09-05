@@ -208,7 +208,7 @@ class BedrockAnalyzer:
             ],
             thinking={"type": "adaptive"},
             output_config={
-                "effort": "high",
+                "effort": settings.effort,
                 "format": {"type": "json_schema", "schema": ANALYSIS_SCHEMA},
             },
             messages=[{"role": "user", "content": content}],
