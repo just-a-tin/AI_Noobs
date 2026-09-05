@@ -11,7 +11,6 @@ import json
 import logging
 
 from .config import settings
-from .dimensions import listed_longest_cm
 from .images import PreparedImage, prepare_images
 from .mocks import mock_analysis
 from .schemas import ANALYSIS_SCHEMA, AnalysisCore, AnalyzeRequest
@@ -25,6 +24,7 @@ You are Sentinel, a fraud analyst for Southeast Asian e-commerce marketplaces \
 is set up for a bait-and-switch: attractive imagery and specifications \
 advertising one product, with a cheaper or counterfeit item actually shipped.
 
+Evaluate the listing across these dimensions and populate the diagnostic flags. \
 Score four dimensions independently, 0-100, where 100 is entirely trustworthy:
 
 1. VISUAL INTEGRITY - Are the gallery images genuine photographs of the product \
@@ -35,14 +35,18 @@ compositing. Crucially, compare gallery images against customer review photos: \
 a systematic mismatch between the two is the single strongest bait-and-switch \
 signal, because review photos show what buyers actually received.
 
-2. SPEC CONSISTENCY - Do title, specification table and images describe one \
-coherent product? Check that weight is physically plausible for the stated \
-dimensions and material, that claimed capacity or performance is achievable, \
-and that the brand in the title actually appears on the product.
+2. SPEC CONSISTENCY & TEXT SIGNALS - Do title, specification table and images \
+describe one coherent product? Check that weight is physically plausible for the \
+stated dimensions and material, that claimed capacity or performance is achievable \
+(e.g., flag physically impossible 16TB flash drives), and that the brand in the \
+title actually appears on the product. Flag any brand mismatches where a title claims \
+a premium brand but the spec table says 'OEM' or 'No Brand'. Look for unedited AI/LLM \
+boilerplate text or off-platform transaction requests (e.g., WhatsApp).
 
-3. PRICE SANITY - Is the price plausible for this category? A steep discount is \
-not by itself fraud; weigh it together with the visual and spec evidence. Treat \
-price as corroborating evidence, not as proof on its own.
+3. PRICE SANITY & COMMERCIAL TRUST - Is the price plausible for this category? \
+Check for variant baiting (where the lowest price tier is an accessory like 'Cable Only') \
+and implausible discounts on high-value goods outside official stores. A steep \
+discount alone is not fraud; weigh it together with the visual and spec evidence.
 
 4. SCALE FIDELITY - Is the product really the size a buyer would expect? This \
 catches one of the most common marketplace scams: photographing a small item so \
@@ -124,16 +128,6 @@ def _describe_listing(req: AnalyzeRequest, images: list[PreparedImage]) -> str:
             "limitation in your findings, and keep visualIntegrity near 50."
         )
 
-    listed_cm = listed_longest_cm(req.specs)
-    claimed = (
-        f"\nCLAIMED SIZE: the specifications state a longest dimension of "
-        f"{listed_cm:g} cm. Check this against what this product really "
-        f"measures and against the images."
-        if listed_cm is not None
-        else "\nCLAIMED SIZE: the listing states no dimensions. Judge expected "
-        "versus apparent size only."
-    )
-
     return f"""\
 Analyse this {req.platform.value} listing.
 
@@ -143,7 +137,6 @@ Seller rating: {req.sellerRating if req.sellerRating is not None else "unknown"}
 Shop location: {req.shopLocation or "unknown"}
 Specifications:
 {specs}
-{claimed}
 {manifest}"""
 
 
@@ -173,8 +166,8 @@ class BedrockAnalyzer:
         return self._client
 
     async def analyze(self, req: AnalyzeRequest) -> AnalysisCore:
-        if settings.mock_bedrock:
-            log.info("mock mode - returning canned verdict for %s", req.itemId)
+        if settings.mock_aws:
+            log.info("MOCK_AWS=true - returning canned verdict for %s", req.itemId)
             return mock_analysis(req)
 
         images = await prepare_images(
