@@ -16,11 +16,20 @@ does and how to run it. This file covers things that are easy to get wrong.
 ## Commands
 
 ```bash
-cd backend && .venv/Scripts/python -m pytest -q      # 34 tests
+cd backend && .venv/Scripts/python -m pytest -q      # 78 tests
 python scripts/e2e_demo.py                           # offline end-to-end
 python scripts/run_local.py                          # API on :8000
+python scripts/check_aws.py                          # preflight for real Bedrock
 python scripts/make_icons.py                         # regenerate icons
 ```
+
+## Mode switches
+
+`MOCK_AWS` is the master default; `MOCK_BEDROCK` and `USE_DYNAMODB` override it
+independently. The useful middle state is real Bedrock with the in-memory cache
+(`MOCK_BEDROCK=false`, `USE_DYNAMODB=false`) — the DynamoDB table only exists
+after a CDK deploy. Tests set `SENTINEL_SKIP_DOTENV=1` so a developer's local
+`.env` cannot change test outcomes.
 
 ## Shopee specifics that bite
 
@@ -45,6 +54,15 @@ python scripts/make_icons.py                         # regenerate icons
   See `test_schema_hygiene.py`.
 - **Cache invalidates on price/spec change, not just TTL** — bait-and-switch
   listings mutate after banking reviews.
+- **Scale estimates must be null without a reference object.** Absolute size is
+  not recoverable from a photo; only size *relative to something of known size
+  in frame* is. `scaleConfidence: NONE` with null estimates is the correct
+  answer for white-background studio shots, and must not be scored as either
+  pass or fail. Guarded by `test_schema.py::test_scale_estimates_are_nullable`.
+- **`_strictify` merges `$ref` siblings rather than replacing.** Pydantic puts a
+  field's own description beside its `$ref`; replacing drops it and leaves only
+  the referenced class's docstring. This silently ate the "MUST be NONE" rule
+  once. `test_schema_hygiene.py::test_ref_fields_keep_their_own_description`.
 - **A failed analysis must surface as `UNAVAILABLE`, never a neutral score.** A
   trust product must not imply "fine" when it means "unknown".
 - Backend calls go through the **service worker**, not the content script

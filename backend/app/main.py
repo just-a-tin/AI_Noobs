@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .bedrock import analyzer
 from .cache import build_cache
 from .config import settings
+from .dimensions import listed_longest_cm
 from .schemas import AnalysisResult, AnalyzeRequest
 from .scoring import RISK_PRESENTATION, derive_risk_level
 
@@ -43,8 +44,10 @@ cache = build_cache()
 def health() -> dict:
     return {
         "status": "ok",
-        "mockMode": settings.mock_aws,
-        "model": settings.model_id if not settings.mock_aws else "mock",
+        "mockMode": settings.mock_bedrock,
+        "model": "mock" if settings.mock_bedrock else settings.model_id,
+        "region": settings.aws_region,
+        "cache": "dynamodb" if settings.use_dynamodb else "in-memory",
     }
 
 
@@ -74,6 +77,7 @@ async def analyze(request: AnalyzeRequest) -> AnalysisResult:
     result = AnalysisResult(
         **core.model_dump(),
         riskLevel=derive_risk_level(core.overallTrustScore),
+        listedLongestCm=listed_longest_cm(request.specs),
         cached=False,
         modelId="mock" if settings.mock_aws else settings.model_id,
         analyzedAt=int(time.time()),

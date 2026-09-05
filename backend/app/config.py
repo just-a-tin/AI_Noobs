@@ -9,7 +9,12 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Load the repo-root .env if present. Lambda supplies real env vars instead.
-load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+#
+# Tests set SENTINEL_SKIP_DOTENV=1: without it, whatever a developer happens to
+# have in their local .env silently changes test outcomes, so the suite would
+# pass on one machine and fail on another for reasons nobody can see.
+if os.getenv("SENTINEL_SKIP_DOTENV") != "1":
+    load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 
 def _bool(name: str, default: bool) -> bool:
@@ -21,7 +26,17 @@ def _bool(name: str, default: bool) -> bool:
 
 @dataclass(frozen=True)
 class Settings:
+    """Two independent switches, with MOCK_AWS as the master default.
+
+    They are separate because the useful middle state is real Bedrock analysis
+    with a local in-memory cache: you can have working AI long before the
+    DynamoDB table is deployed, and pointing at a table that does not exist
+    just fills the logs with errors.
+    """
+
     mock_aws: bool = field(default_factory=lambda: _bool("MOCK_AWS", True))
+
+    # Region matters: Bedrock model availability differs by region.
     aws_region: str = field(default_factory=lambda: os.getenv("AWS_REGION", "us-east-1"))
     model_id: str = field(
         default_factory=lambda: os.getenv("BEDROCK_MODEL_ID", "anthropic.claude-opus-5")
@@ -41,6 +56,20 @@ class Settings:
     @property
     def cache_ttl_seconds(self) -> int:
         return self.cache_ttl_hours * 3600
+
+    @property
+    def mock_bedrock(self) -> bool:
+        """Return canned verdicts instead of calling the model."""
+        return _bool("MOCK_BEDROCK", self.mock_aws)
+
+    @property
+    def use_dynamodb(self) -> bool:
+        """Use DynamoDB rather than the in-memory cache.
+
+        Defaults to off even when MOCK_AWS is false, because the table only
+        exists once the CDK stack is deployed. Turn it on deliberately.
+        """
+        return _bool("USE_DYNAMODB", False)
 
 
 settings = Settings()

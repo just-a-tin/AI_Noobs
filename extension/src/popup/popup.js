@@ -27,6 +27,48 @@
       </div>`;
   }
 
+  /**
+   * Real-world size check. When no reference object was in frame the size is
+   * genuinely unknowable from photos, and is reported as such — never dressed
+   * up as a measurement.
+   */
+  function renderSize(result) {
+    const sa = result.scaleAnalysis;
+    if (!sa) return "";
+
+    const fmt = (cm) => (cm == null ? null : `${(+cm).toFixed(0)} cm`);
+    const apparent = fmt(sa.apparentLongestCm);
+    const claim = fmt(result.listedLongestCm) || fmt(sa.expectedLongestCm);
+
+    if (sa.scaleConfidence === "NONE" || !apparent) {
+      return `
+        <h4>Real-world size</h4>
+        <div class="size unknown">
+          <b>Could not be verified.</b> ${esc(sa.explanation)}
+        </div>`;
+    }
+
+    return `
+      <h4>Real-world size</h4>
+      <div class="size ${sa.mismatchDetected ? "mismatch" : "match"}">
+        <div class="size-row">
+          ${claim ? `<span class="claim">${claim}</span><span class="arrow">→</span>` : ""}
+          <span class="actual">${apparent}</span>
+          <span class="verdict">${
+            sa.mismatchDetected ? "actual size" : "confirmed"
+          }</span>
+        </div>
+        <div class="size-why">${esc(sa.explanation)}</div>
+        ${
+          sa.scaleReference
+            ? `<div class="size-ref">Measured against ${esc(
+                sa.scaleReference
+              )} · ${esc(sa.scaleConfidence)} confidence</div>`
+            : ""
+        }
+      </div>`;
+  }
+
   function render(entry) {
     const { result, listing } = entry;
     const p = presentation(result.riskLevel);
@@ -54,6 +96,9 @@
       ${bar("Visual integrity", s.visualIntegrity, p.color)}
       ${bar("Spec consistency", s.specConsistency, p.color)}
       ${bar("Price sanity", s.priceSanity, p.color)}
+      ${bar("Scale fidelity", s.scaleFidelity, p.color)}
+
+      ${renderSize(result)}
 
       ${findings ? `<h4>Findings</h4><ul>${findings}</ul>` : ""}
       ${discrepancies ? `<h4>Spec discrepancies</h4><ul>${discrepancies}</ul>` : ""}

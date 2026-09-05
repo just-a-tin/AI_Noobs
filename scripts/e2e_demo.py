@@ -104,7 +104,23 @@ def main() -> int:
     )
     print(f"    Visual integrity  {s['visualIntegrity']:>3}")
     print(f"    Spec consistency  {s['specConsistency']:>3}")
-    print(f"    Price sanity      {s['priceSanity']:>3}\n")
+    print(f"    Price sanity      {s['priceSanity']:>3}")
+    print(f"    Scale fidelity    {s['scaleFidelity']:>3}\n")
+
+    sa = result["scaleAnalysis"]
+    print(f"{DIM}    Real-world size{RESET}")
+    print(f"    identified as: {sa['identifiedProduct']}")
+    if sa["scaleConfidence"] == "NONE" or sa["apparentLongestCm"] is None:
+        print(f"    {YELLOW}size could not be determined from the images{RESET}")
+    else:
+        claim = result.get("listedLongestCm") or sa["expectedLongestCm"]
+        arrow = f"{claim:g} cm -> " if claim else ""
+        marker = f"{RED}MISMATCH{RESET}" if sa["mismatchDetected"] else f"{GREEN}ok{RESET}"
+        print(
+            f"    {arrow}{sa['apparentLongestCm']:g} cm in photos  [{marker}]"
+            f"  (ref: {sa['scaleReference']})"
+        )
+    print(f"{DIM}    {sa['explanation']}{RESET}\n")
 
     for finding in result["findings"]:
         print(f"    • {finding}")
@@ -121,7 +137,7 @@ def main() -> int:
 
     ok = all(
         [
-            check("price descaled from micros", abs(payload["price"] - 59.90) < 0.01),
+            check("price descaled from micros", abs(payload["price"] - 12.90) < 0.01),
             check("image hashes became CDN URLs", payload["imageUrls"][0].startswith(CDN)),
             check("trust score in range", 0 <= result["overallTrustScore"] <= 100),
             check(
@@ -129,7 +145,15 @@ def main() -> int:
                 result["riskLevel"] == derive_risk_level(result["overallTrustScore"]).value,
             ),
             check("findings present", bool(result["findings"])),
-            check("sub-scores present for UI breakdown", len(s) == 3),
+            check("sub-scores present for UI breakdown", len(s) == 4),
+            check(
+                "claimed size parsed from specs",
+                result.get("listedLongestCm") is not None,
+            ),
+            check(
+                "scale estimate is null unless a reference was found",
+                (sa["scaleConfidence"] == "NONE") == (sa["apparentLongestCm"] is None),
+            ),
             check("repeat request served from cache", second["cached"] is True),
             check("price change busts the cache", moved["cached"] is False),
         ]

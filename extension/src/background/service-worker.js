@@ -70,7 +70,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     try {
       const result = config.uiMockMode
-        ? mockVerdict(listing.itemId)
+        ? mockVerdict(listing)
         : await callApi(listing);
 
       if (tabId != null) {

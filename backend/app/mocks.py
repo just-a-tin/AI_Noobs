@@ -18,11 +18,34 @@ from __future__ import annotations
 import hashlib
 import re
 
-from .schemas import AnalysisCore, AnalyzeRequest, ImageAnalysis, SubScores
+from .schemas import (
+    AnalysisCore,
+    AnalyzeRequest,
+    ImageAnalysis,
+    ScaleAnalysis,
+    ScaleConfidence,
+    SubScores,
+)
 
 _CLEAN = AnalysisCore(
     overallTrustScore=88,
-    subScores=SubScores(visualIntegrity=92, specConsistency=90, priceSanity=82),
+    subScores=SubScores(
+        visualIntegrity=92, specConsistency=90, priceSanity=82, scaleFidelity=86
+    ),
+    scaleAnalysis=ScaleAnalysis(
+        identifiedProduct="wireless earbuds charging case",
+        scaleConfidence=ScaleConfidence.HIGH,
+        scaleReference="adult hand holding the case",
+        expectedLongestCm=6.0,
+        apparentLongestCm=6.2,
+        mismatchDetected=False,
+        explanation=(
+            "One review photo shows the case held in an adult hand, spanning "
+            "roughly a third of the palm width. That puts it near 6 cm, which "
+            "matches both the listed dimensions and the normal size for this "
+            "product."
+        ),
+    ),
     findings=[
         "Gallery images and customer review photos show a consistent product.",
         "Listed weight and dimensions agree with the manufacturer's published specs.",
@@ -43,7 +66,24 @@ _CLEAN = AnalysisCore(
 
 _SPEC_MISMATCH = AnalysisCore(
     overallTrustScore=58,
-    subScores=SubScores(visualIntegrity=74, specConsistency=38, priceSanity=61),
+    subScores=SubScores(
+        visualIntegrity=74, specConsistency=38, priceSanity=61, scaleFidelity=50
+    ),
+    scaleAnalysis=ScaleAnalysis(
+        identifiedProduct="compact bluetooth speaker",
+        # The common, honest case: studio shots on white with nothing for scale.
+        scaleConfidence=ScaleConfidence.NONE,
+        scaleReference=None,
+        expectedLongestCm=12.0,
+        apparentLongestCm=None,
+        mismatchDetected=False,
+        explanation=(
+            "All images are studio shots on a plain white background with no "
+            "object of known size in frame, so the product's real size cannot "
+            "be determined from them. This is common and not suspicious in "
+            "itself, but it means size could not be verified."
+        ),
+    ),
     findings=[
         "Listed weight (2.4 kg) is inconsistent with the stated dimensions and "
         "material for this product class.",
@@ -68,13 +108,32 @@ _SPEC_MISMATCH = AnalysisCore(
 
 _BAIT_AND_SWITCH = AnalysisCore(
     overallTrustScore=17,
-    subScores=SubScores(visualIntegrity=12, specConsistency=20, priceSanity=19),
+    subScores=SubScores(
+        visualIntegrity=12, specConsistency=20, priceSanity=19, scaleFidelity=8
+    ),
+    scaleAnalysis=ScaleAnalysis(
+        identifiedProduct="artificial Christmas tree",
+        scaleConfidence=ScaleConfidence.HIGH,
+        scaleReference="adult hand in customer review photo",
+        expectedLongestCm=180.0,
+        apparentLongestCm=22.0,
+        mismatchDetected=True,
+        explanation=(
+            "Gallery images show the tree beside a sofa, implying roughly 180 "
+            "cm. But a customer review photo shows the delivered item held in "
+            "one hand, spanning barely the width of a palm — about 22 cm. The "
+            "gallery photography is staged to make a desk ornament look like "
+            "full-sized furniture."
+        ),
+    ),
     findings=[
+        "Gallery images show the product at roughly 180 cm, but review photos "
+        "show buyers holding a 22 cm version in one hand.",
         "Gallery images show strong indicators of AI generation: malformed text "
         "on packaging and inconsistent reflections.",
         "Customer review photos show a visibly different, lower-grade product.",
-        "Price is 82% below the median for this product category — far outside "
-        "the range explainable by a legitimate promotion.",
+        "Price is far below the median for this product category — outside the "
+        "range explainable by a legitimate promotion.",
         "Shop was created recently and has a low rating relative to its volume.",
     ],
     imageAnalysis=ImageAnalysis(
@@ -88,9 +147,11 @@ _BAIT_AND_SWITCH = AnalysisCore(
         ),
     ),
     specDiscrepancies=[
-        "Advertised 512GB capacity is implausible at the listed price.",
+        "Listing states a height of 180 cm, but review photos show an item that "
+        "fits in one hand.",
+        "Stated shipping weight of 0.31 kg is far too light for a 180 cm tree.",
+        "Package dimensions (60 cm longest side) cannot contain a 180 cm tree.",
         "Brand named in the title does not appear on the product in review photos.",
-        "No model number given, unusual for this category.",
     ],
 )
 

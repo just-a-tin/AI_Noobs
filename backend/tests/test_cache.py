@@ -8,6 +8,8 @@ from app.schemas import (
     AnalyzeRequest,
     ImageAnalysis,
     RiskLevel,
+    ScaleAnalysis,
+    ScaleConfidence,
     SubScores,
 )
 
@@ -30,7 +32,21 @@ def make_request(**overrides) -> AnalyzeRequest:
 def make_result(score: int = 80) -> AnalysisResult:
     return AnalysisResult(
         overallTrustScore=score,
-        subScores=SubScores(visualIntegrity=score, specConsistency=score, priceSanity=score),
+        subScores=SubScores(
+            visualIntegrity=score,
+            specConsistency=score,
+            priceSanity=score,
+            scaleFidelity=score,
+        ),
+        scaleAnalysis=ScaleAnalysis(
+            identifiedProduct="wireless earbuds",
+            scaleConfidence=ScaleConfidence.HIGH,
+            scaleReference="adult hand",
+            expectedLongestCm=6.0,
+            apparentLongestCm=6.1,
+            mismatchDetected=False,
+            explanation="Matches expected size.",
+        ),
         findings=["ok"],
         imageAnalysis=ImageAnalysis(
             isAiGenerated=False, visualDiscrepancyDetected=False, explanation="fine"

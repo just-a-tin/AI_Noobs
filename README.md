@@ -19,12 +19,36 @@ returns a 0–100 trust score with a diagnostic breakdown:
 | **Visual integrity** | AI-generation artefacts, reused stock imagery, foreign watermarks — and whether the seller's gallery matches what buyers actually photographed |
 | **Spec consistency** | Whether title, spec table and images describe one coherent product; whether weight is plausible for the stated dimensions and material |
 | **Price sanity** | Whether the price is explicable for the category — weighed as corroborating evidence, never as proof on its own |
+| **Scale fidelity** | Whether the product is really the size the listing implies — see below |
 
 The badge is colour-coded: **green** ≥75, **yellow** 45–74, **red** <45.
 
 The strongest signal is the comparison between seller gallery images and
 verified customer review photos, because review photos show what buyers
 actually received.
+
+### Scale fidelity, and its one hard limit
+
+This catches the "ordered a 180 cm Christmas tree, received a 22 cm desk
+ornament" scam — a small item photographed to look full-sized. Three numbers
+are triangulated:
+
+| Source | Where it comes from |
+|---|---|
+| **Claimed** | Parsed from the listing's specs by [`dimensions.py`](backend/app/dimensions.py) |
+| **Expected** | The model's own knowledge of what this product actually measures |
+| **Apparent** | Estimated from the images against a reference object in frame |
+
+**Absolute size cannot be recovered from a photograph.** A miniature shot close
+up is pixel-for-pixel identical to a full-size object shot from further away.
+Estimating apparent size therefore requires something of known size in the same
+frame — a hand, a coin, a doorway, a person.
+
+When no such reference exists, `scaleConfidence` is `NONE`, the estimates are
+`null`, and the UI says the size could not be verified. It does not guess, and
+it does not treat "unknown" as either reassuring or damning. Listings with only
+white-background studio shots are extremely common and are not suspicious for
+lacking scale cues.
 
 ---
 
@@ -135,6 +159,22 @@ details that bite: prices come back scaled by 100 000, and images are CDN
 hashes rather than URLs.
 
 ---
+
+## Turning on real AI
+
+Mock mode is the default. To use real Claude analysis:
+
+1. Fill `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` into `.env`
+   (AWS console → IAM → Users → Security credentials → Create access key).
+2. Set `MOCK_BEDROCK=false`.
+3. Enable model access: AWS console → Bedrock → Model access → tick Claude.
+4. Verify: `python scripts/check_aws.py`
+
+Leave `USE_DYNAMODB=false` until the CDK stack is deployed — the in-memory
+cache works fine, and pointing at a table that doesn't exist only fills the
+logs with errors.
+
+Note that real analysis costs money per listing, and images are token-heavy.
 
 ## Going live on AWS
 

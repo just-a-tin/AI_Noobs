@@ -1,34 +1,34 @@
 {
-  "_comment": "Trimmed capture mirroring the shape of https://shopee.sg/api/v4/pdp/get_pc. Prices are scaled by 100000, images are CDN hashes, not URLs.",
-  "_sourceUrl": "https://shopee.sg/Wireless-Earbuds-Pro-ANC-i.998877.22334455",
+  "_comment": "Trimmed capture mirroring the shape of https://shopee.sg/api/v4/pdp/get_pc. Prices are scaled by 100000, images are CDN hashes, not URLs. This listing is the canonical size scam: advertised as a 180cm floor tree, delivered as a 22cm desk ornament.",
+  "_sourceUrl": "https://shopee.sg/180cm-Artificial-Christmas-Tree-i.998877.22334455",
   "error": 0,
   "data": {
     "item": {
       "itemid": 22334455,
       "shopid": 998877,
-      "title": "Wireless Earbuds Pro ANC Bluetooth 5.3 Noise Cancelling 512GB Storage",
-      "price": 5990000,
-      "price_min": 5990000,
-      "price_before_discount": 32900000,
-      "stock": 480,
-      "sold": 1204,
+      "title": "180cm Artificial Christmas Tree 100% Original Premium Pine Xmas Decoration with Metal Stand",
+      "price": 1290000,
+      "price_min": 1290000,
+      "price_before_discount": 8900000,
+      "stock": 940,
+      "sold": 2317,
       "shop_location": "Singapore",
       "shop_rating": 4.1,
       "item_rating": {
-        "rating_star": 3.9,
-        "rating_count": [312, 21, 18, 34, 61, 178]
+        "rating_star": 3.4,
+        "rating_count": [488, 196, 44, 51, 79, 118]
       },
-      "weight": 0.052,
+      "weight": 0.31,
       "dimension": {
-        "length": 6,
-        "width": 5,
-        "height": 3
+        "length": 60,
+        "width": 25,
+        "height": 25
       },
       "attributes": [
-        { "name": "Brand", "value": "SoundMax" },
-        { "name": "Material", "value": "ABS plastic" },
-        { "name": "Battery Life", "value": "40 hours" },
-        { "name": "Storage Capacity", "value": "512GB" },
+        { "name": "Brand", "value": "FestiveHome" },
+        { "name": "Height", "value": "180 cm" },
+        { "name": "Material", "value": "PVC" },
+        { "name": "Number of Branches", "value": "1200" },
         { "name": "Warranty Type", "value": "No Warranty" }
       ],
       "images": [

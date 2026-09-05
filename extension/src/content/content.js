@@ -73,6 +73,16 @@
       ul { margin: 0; padding-left: 16px; color: #334155; }
       li { margin-bottom: 4px; }
       .muted { color: #64748b; font-size: 11px; margin-top: 10px; }
+      .size {
+        margin: 12px 0 4px; padding: 10px; border-radius: 8px; background: #f8fafc;
+      }
+      .size-cmp {
+        display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px;
+      }
+      .size-cmp b { font-size: 15px; color: #0f172a; }
+      .size-cmp s { color: #94a3b8; }
+      .size-note { font-size: 11px; color: #475569; }
+      .size-ref { font-size: 10px; color: #94a3b8; margin-top: 5px; }
       .spinner {
         width: 16px; height: 16px; border-radius: 50%;
         border: 2px solid #cbd5e1; border-top-color: #475569;
@@ -121,6 +131,50 @@
       </div></div>`;
   }
 
+  /**
+   * Size comparison panel. Shown only when scale was actually determinable —
+   * a missing estimate is reported as unknown rather than dressed up as a
+   * measurement, since size cannot be recovered from a photo without a
+   * reference object in frame.
+   */
+  function renderSize(result) {
+    const sa = result.scaleAnalysis;
+    if (!sa) return "";
+
+    const fmt = (cm) => (cm == null ? null : `${(+cm).toFixed(0)} cm`);
+    const apparent = fmt(sa.apparentLongestCm);
+    const expected = fmt(sa.expectedLongestCm);
+    const listed = fmt(result.listedLongestCm);
+
+    if (sa.scaleConfidence === "NONE" || !apparent) {
+      return `
+        <div class="size">
+          <div class="size-note"><b>Size could not be verified.</b>
+          ${escapeHtml(sa.explanation || "")}</div>
+        </div>`;
+    }
+
+    const claim = listed || expected;
+    return `
+      <div class="size">
+        <div class="size-cmp">
+          ${claim ? `<s>${claim}</s>` : ""}
+          <b>${apparent}</b>
+          <span class="size-note">${
+            sa.mismatchDetected ? "actual size in photos" : "confirmed in photos"
+          }</span>
+        </div>
+        <div class="size-note">${escapeHtml(sa.explanation || "")}</div>
+        ${
+          sa.scaleReference
+            ? `<div class="size-ref">Measured against: ${escapeHtml(
+                sa.scaleReference
+              )} · confidence ${escapeHtml(sa.scaleConfidence)}</div>`
+            : ""
+        }
+      </div>`;
+  }
+
   function renderResult(shadow, result) {
     const p = presentation(result.riskLevel);
     const s = result.subScores || {};
@@ -146,6 +200,8 @@
           ${bar("Visual integrity", s.visualIntegrity ?? 0, p.color)}
           ${bar("Spec consistency", s.specConsistency ?? 0, p.color)}
           ${bar("Price sanity", s.priceSanity ?? 0, p.color)}
+          ${bar("Scale fidelity", s.scaleFidelity ?? 0, p.color)}
+          ${renderSize(result)}
           ${findings ? `<h4>Findings</h4><ul>${findings}</ul>` : ""}
           ${discrepancies ? `<h4>Spec discrepancies</h4><ul>${discrepancies}</ul>` : ""}
           <div class="muted">

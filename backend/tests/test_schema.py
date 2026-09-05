@@ -35,6 +35,7 @@ def test_top_level_shape_matches_spec():
     for expected in (
         "overallTrustScore",
         "subScores",
+        "scaleAnalysis",
         "findings",
         "imageAnalysis",
         "specDiscrepancies",
@@ -44,10 +45,31 @@ def test_top_level_shape_matches_spec():
     # riskLevel is derived by the backend, never asked of the model.
     assert "riskLevel" not in props
 
+    # listedLongestCm is parsed from the specs, not asked of the model.
+    assert "listedLongestCm" not in props
+
 
 def test_subscores_present_for_ui_breakdown():
     sub = ANALYSIS_SCHEMA["properties"]["subScores"]["properties"]
-    assert set(sub) == {"visualIntegrity", "specConsistency", "priceSanity"}
+    assert set(sub) == {
+        "visualIntegrity",
+        "specConsistency",
+        "priceSanity",
+        "scaleFidelity",
+    }
+
+
+def test_scale_estimates_are_nullable():
+    """Absolute size is unrecoverable without a reference object, so the model
+    must be able to answer 'unknown' rather than invent a number."""
+    scale = ANALYSIS_SCHEMA["properties"]["scaleAnalysis"]["properties"]
+
+    for nullable in ("scaleReference", "expectedLongestCm", "apparentLongestCm"):
+        rendered = repr(scale[nullable])
+        assert "null" in rendered, f"{nullable} must permit null"
+
+    # The confidence enum must offer an explicit "cannot tell" value.
+    assert "NONE" in repr(scale["scaleConfidence"])
 
 
 def test_mock_verdicts_validate_against_model():

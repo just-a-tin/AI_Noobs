@@ -47,6 +47,21 @@ def test_field_descriptions_survive():
         assert sub[name]["description"].startswith("0-100")
 
 
+def test_ref_fields_keep_their_own_description():
+    """Pydantic puts a field's description beside its $ref. Inlining the $ref
+    by replacement drops it, leaving only the referenced class's docstring —
+    silently losing the instruction written for that specific field.
+
+    This is exactly how the 'if nothing provides scale, this MUST be NONE'
+    rule went missing once already.
+    """
+    scale = ANALYSIS_SCHEMA["properties"]["scaleAnalysis"]["properties"]
+    description = scale["scaleConfidence"]["description"]
+
+    assert "MUST be NONE" in description
+    assert "enum" in scale["scaleConfidence"] or "NONE" in repr(scale["scaleConfidence"])
+
+
 def test_object_nodes_carry_no_description():
     def objects(node):
         if isinstance(node, dict):

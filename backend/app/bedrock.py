@@ -11,6 +11,7 @@ import json
 import logging
 
 from .config import settings
+from .dimensions import listed_longest_cm
 from .images import PreparedImage, prepare_images
 from .mocks import mock_analysis
 from .schemas import ANALYSIS_SCHEMA, AnalysisCore, AnalyzeRequest
@@ -24,7 +25,7 @@ You are Sentinel, a fraud analyst for Southeast Asian e-commerce marketplaces \
 is set up for a bait-and-switch: attractive imagery and specifications \
 advertising one product, with a cheaper or counterfeit item actually shipped.
 
-Score three dimensions independently, 0-100, where 100 is entirely trustworthy:
+Score four dimensions independently, 0-100, where 100 is entirely trustworthy:
 
 1. VISUAL INTEGRITY - Are the gallery images genuine photographs of the product \
 being sold? Look for generative-AI artefacts (malformed text on packaging, \
@@ -43,9 +44,39 @@ and that the brand in the title actually appears on the product.
 not by itself fraud; weigh it together with the visual and spec evidence. Treat \
 price as corroborating evidence, not as proof on its own.
 
+4. SCALE FIDELITY - Is the product really the size a buyer would expect? This \
+catches one of the most common marketplace scams: photographing a small item so \
+it appears full-sized, so the buyer orders furniture and receives a doll-sized \
+version. Triangulate three numbers:
+
+   (a) CLAIMED - the size stated in the listing, given to you below when the \
+       specifications contain one.
+   (b) EXPECTED - from your own knowledge, what this kind of product actually \
+       measures in the real world.
+   (c) APPARENT - how big the product looks in the images.
+
+   To judge (c) you MUST find something of known real size in the same frame: \
+a hand (~18 cm), a finger, a coin, a phone, a keyboard, a mug, a power socket, \
+a doorway, a person, floor tiles, a ruler. Estimate the product against that \
+reference, and name the reference you used.
+
+   CRITICAL: absolute size cannot be recovered from a photograph without such \
+a reference. A miniature photographed close up is pixel-for-pixel identical to \
+a full-size object photographed further away. If no reference object is in \
+frame, set scaleConfidence to NONE, leave apparentLongestCm null, and say so \
+in the explanation. Do not guess a number, and do not treat a missing estimate \
+as either reassuring or damning - score scaleFidelity around 50.
+
+   Report a mismatch only when the disagreement is large enough to actually \
+mislead a buyer. Manufacturing tolerance, packaging-versus-product size, and \
+rounding are not fraud. A listing whose only images are plain white-background \
+studio shots with nothing for scale is very common and is not by itself \
+suspicious - it is simply undeterminable.
+
 Then set overallTrustScore as a holistic judgement. It should broadly reflect \
-the three sub-scores, weighted by which evidence is strongest, rather than a \
-strict average.
+the four sub-scores, weighted by which evidence is strongest, rather than a \
+strict average. A confirmed scale mismatch is strong evidence of deliberate \
+deception and should weigh heavily; an undeterminable scale should not.
 
 Write findings as specific, concrete observations a shopper could verify \
 themselves - not generic safety advice. If evidence is thin or images are \
@@ -79,6 +110,16 @@ def _describe_listing(req: AnalyzeRequest, images: list[PreparedImage]) -> str:
             "limitation in your findings, and keep visualIntegrity near 50."
         )
 
+    listed_cm = listed_longest_cm(req.specs)
+    claimed = (
+        f"\nCLAIMED SIZE: the specifications state a longest dimension of "
+        f"{listed_cm:g} cm. Check this against what this product really "
+        f"measures and against the images."
+        if listed_cm is not None
+        else "\nCLAIMED SIZE: the listing states no dimensions. Judge expected "
+        "versus apparent size only."
+    )
+
     return f"""\
 Analyse this {req.platform.value} listing.
 
@@ -88,6 +129,7 @@ Seller rating: {req.sellerRating if req.sellerRating is not None else "unknown"}
 Shop location: {req.shopLocation or "unknown"}
 Specifications:
 {specs}
+{claimed}
 {manifest}"""
 
 
@@ -105,8 +147,8 @@ class BedrockAnalyzer:
         return self._client
 
     async def analyze(self, req: AnalyzeRequest) -> AnalysisCore:
-        if settings.mock_aws:
-            log.info("MOCK_AWS=true - returning canned verdict for %s", req.itemId)
+        if settings.mock_bedrock:
+            log.info("mock mode - returning canned verdict for %s", req.itemId)
             return mock_analysis(req)
 
         images = await prepare_images(

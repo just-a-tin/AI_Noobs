@@ -62,6 +62,21 @@ h4 {
 ul { padding-left: 16px; color: #334155; }
 li { margin-bottom: 5px; }
 
+/* Real-world size panel */
+.size { padding: 10px; border-radius: 8px; background: #f1f5f9; }
+.size.mismatch { background: #fef2f2; }
+.size.match { background: #f0fdf4; }
+.size.unknown { color: #475569; font-size: 11px; line-height: 1.5; }
+
+.size-row { display: flex; align-items: baseline; gap: 7px; margin-bottom: 6px; }
+.size-row .claim { font-size: 14px; color: #94a3b8; text-decoration: line-through; }
+.size-row .arrow { color: #94a3b8; }
+.size-row .actual { font-size: 19px; font-weight: 700; color: #0f172a; }
+.size-row .verdict { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: .04em; }
+
+.size-why { font-size: 11px; color: #334155; line-height: 1.5; }
+.size-ref { font-size: 10px; color: #94a3b8; margin-top: 6px; }
+
 .flag {
   display: flex; gap: 7px; padding: 9px 10px; border-radius: 8px;
   background: #fef2f2; color: #991b1b; font-size: 11px; margin-top: 12px;

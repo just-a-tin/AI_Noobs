@@ -69,6 +69,77 @@ class ImageAnalysis(BaseModel):
     )
 
 
+# NOTE: deliberately no docstring. A docstring here becomes the schema
+# description for every field of this type and would compete with the
+# field-level instruction on `scaleConfidence`, which is the specific one.
+#
+# NONE is the important value: absolute size cannot be recovered from a photo
+# without something of known size in frame, so "cannot tell" must be
+# expressible rather than forcing a fabricated number.
+class ScaleConfidence(str, Enum):
+    NONE = "NONE"
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+
+
+class ScaleAnalysis(BaseModel):
+    """Does the product's apparent size match reality and the listing?
+
+    Three numbers are triangulated: what the listing claims, what this kind of
+    product actually measures, and how big it looks next to a reference object.
+    Any two disagreeing is the signal — it catches the common
+    "ordered furniture, received a dollhouse version" scam.
+    """
+
+    identifiedProduct: str = Field(
+        description=(
+            "What the product in the images actually appears to be, as "
+            "specifically as you can tell (e.g. 'wireless earbuds charging "
+            "case', 'artificial Christmas tree')."
+        )
+    )
+    scaleConfidence: ScaleConfidence = Field(
+        description=(
+            "HIGH/MEDIUM/LOW only if an object of known real-world size is "
+            "visible in frame to judge against. If nothing provides scale, "
+            "this MUST be NONE and the size estimates MUST be null. Absolute "
+            "size cannot be recovered from a photo without a reference."
+        )
+    )
+    scaleReference: str | None = Field(
+        description=(
+            "The in-frame object used to judge size (e.g. 'adult hand', "
+            "'AA battery', 'standard doorway'). Null if none was available."
+        )
+    )
+    expectedLongestCm: float | None = Field(
+        description=(
+            "From your own knowledge, the typical longest dimension in cm for "
+            "this kind of product. Null if you genuinely cannot say."
+        )
+    )
+    apparentLongestCm: float | None = Field(
+        description=(
+            "Longest dimension in cm the product appears to be in the images, "
+            "judged against scaleReference. Null when scaleConfidence is NONE."
+        )
+    )
+    mismatchDetected: bool = Field(
+        description=(
+            "True only if the claimed, expected and apparent sizes disagree by "
+            "enough to mislead a buyer. Never true on a null estimate."
+        )
+    )
+    explanation: str = Field(
+        description=(
+            "Two or three sentences on how you judged the size, naming the "
+            "reference object. If scale could not be determined, say that "
+            "plainly instead of guessing."
+        )
+    )
+
+
 class SubScores(BaseModel):
     """Per-dimension scores backing the popup's diagnostic breakdown.
 
@@ -104,6 +175,16 @@ class SubScores(BaseModel):
             "alone is not fraud; weigh it with the other evidence."
         ),
     )
+    scaleFidelity: int = Field(
+        ge=0,
+        le=100,
+        description=(
+            "0-100. Does the product's real size match what the listing claims "
+            "and what the images imply? Low when images are staged to make a "
+            "small item look large. Use 50 when scale could not be determined "
+            "— an unknown is not a pass and not a failure."
+        ),
+    )
 
 
 class AnalysisCore(BaseModel):
@@ -121,6 +202,7 @@ class AnalysisCore(BaseModel):
         ),
     )
     subScores: SubScores
+    scaleAnalysis: ScaleAnalysis
     findings: list[str] = Field(
         description=(
             "Specific, concrete observations a shopper could verify themselves. "
@@ -138,6 +220,9 @@ class AnalysisCore(BaseModel):
 
 class AnalysisResult(AnalysisCore):
     riskLevel: RiskLevel
+    # Parsed deterministically from the specs, not asked of the model, so the
+    # UI can show what the listing claimed alongside what the images implied.
+    listedLongestCm: float | None = None
     cached: bool = False
     modelId: str | None = None
     analyzedAt: int | None = None  # epoch seconds
@@ -182,7 +267,16 @@ def build_analysis_schema() -> dict[str, Any]:
         if isinstance(node, dict):
             ref = node.get("$ref")
             if ref and ref.startswith("#/$defs/"):
-                return inline(defs[ref.split("/")[-1]])
+                # Merge, don't replace. Pydantic emits a field's own
+                # description as a sibling of $ref, so returning the
+                # definition alone silently drops the instruction written for
+                # that field and leaves only the referenced class's docstring.
+                # The field-level description is the specific one, so it wins.
+                target = inline(defs[ref.split("/")[-1]])
+                siblings = {
+                    k: inline(v) for k, v in node.items() if k != "$ref"
+                }
+                return {**target, **siblings}
             return {k: inline(v) for k, v in node.items()}
         if isinstance(node, list):
             return [inline(item) for item in node]

@@ -119,8 +119,8 @@ class DynamoDBCache(_BaseCache):
 
 
 def build_cache() -> AnalysisCache:
-    if settings.mock_aws:
-        log.info("cache: in-memory (MOCK_AWS=true)")
+    if not settings.use_dynamodb:
+        log.info("cache: in-memory (set USE_DYNAMODB=true once the table exists)")
         return InMemoryCache()
     log.info("cache: DynamoDB table %s", settings.table_name)
     return DynamoDBCache(settings.table_name, settings.aws_region)

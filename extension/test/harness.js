@@ -17,12 +17,12 @@
   const listing = extract.fromDom({ shopId: "998877", itemId: "22334455" });
 
   const checks = [
-    ["title", listing.title, /512GB Storage$/.test(listing.title)],
-    ["price", listing.price, Math.abs(listing.price - 59.9) < 0.01],
+    ["title", listing.title, /Christmas Tree/.test(listing.title)],
+    ["price", listing.price, Math.abs(listing.price - 12.9) < 0.01],
     [
       "originalPrice",
       listing.originalPrice,
-      Math.abs(listing.originalPrice - 329) < 0.01,
+      Math.abs(listing.originalPrice - 89) < 0.01,
     ],
     ["spec count", Object.keys(listing.specs).length, Object.keys(listing.specs).length === 5],
     // Exact counts: the gallery/review split is the signal the model relies on,
@@ -43,13 +43,35 @@
 
   // --- Badge preview --------------------------------------------------------
 
-  const verdict = mockVerdict(listing.itemId);
+  const verdict = mockVerdict(listing);
   const p = presentation(verdict.riskLevel);
   const s = verdict.subScores;
 
   const host = document.createElement("div");
   host.style.cssText = "position:fixed;right:20px;bottom:20px;z-index:99999;";
   document.body.appendChild(host);
+
+  const sizePanel = (v) => {
+    const sa = v.scaleAnalysis;
+    if (!sa) return "";
+    if (sa.scaleConfidence === "NONE" || sa.apparentLongestCm == null) {
+      return `<div style="margin-top:10px;padding:9px;border-radius:8px;background:#f1f5f9;
+                          font-size:11px;color:#475569;line-height:1.5">
+                <b>Size could not be verified.</b> ${sa.explanation}
+              </div>`;
+    }
+    const claim = v.listedLongestCm ?? sa.expectedLongestCm;
+    return `<div style="margin-top:10px;padding:9px;border-radius:8px;
+                        background:${sa.mismatchDetected ? "#fef2f2" : "#f0fdf4"}">
+              <div style="display:flex;align-items:baseline;gap:7px;margin-bottom:5px">
+                ${claim ? `<s style="color:#94a3b8">${claim} cm</s><span style="color:#94a3b8">→</span>` : ""}
+                <b style="font-size:18px;color:#0f172a">${sa.apparentLongestCm} cm</b>
+              </div>
+              <div style="font-size:11px;color:#334155;line-height:1.5">${sa.explanation}</div>
+              ${sa.scaleReference ? `<div style="font-size:10px;color:#94a3b8;margin-top:5px">
+                 Measured against ${sa.scaleReference}</div>` : ""}
+            </div>`;
+  };
 
   const bar = (name, value) => `
     <div style="margin-bottom:9px">
@@ -79,6 +101,8 @@
         ${bar("Visual integrity", s.visualIntegrity)}
         ${bar("Spec consistency", s.specConsistency)}
         ${bar("Price sanity", s.priceSanity)}
+        ${bar("Scale fidelity", s.scaleFidelity)}
+        ${sizePanel(verdict)}
         <div style="font-size:11px;color:#64748b;margin-top:8px">Preview — mock verdict</div>
       </div>
     </div>`;

@@ -26,7 +26,16 @@ def main() -> None:
     if not mock:
         print("MOCK_AWS is false — real Bedrock and DynamoDB calls will be made.\n")
 
-    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)
+    # Watch only our own source. Without reload_dirs, uvicorn watches the whole
+    # project including backend/.venv, and restarts on library files that never
+    # change — the server ends up thrashing instead of serving.
+    uvicorn.run(
+        "app.main:app",
+        host="127.0.0.1",
+        port=8000,
+        reload=True,
+        reload_dirs=[str(ROOT / "backend" / "app")],
+    )
 
 
 if __name__ == "__main__":

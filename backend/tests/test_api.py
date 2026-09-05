@@ -40,6 +40,16 @@ def test_analyze_returns_full_contract():
         "visualIntegrity",
         "specConsistency",
         "priceSanity",
+        "scaleFidelity",
+    }
+    assert set(body["scaleAnalysis"]) == {
+        "identifiedProduct",
+        "scaleConfidence",
+        "scaleReference",
+        "expectedLongestCm",
+        "apparentLongestCm",
+        "mismatchDetected",
+        "explanation",
     }
     assert set(body["imageAnalysis"]) == {
         "isAiGenerated",
