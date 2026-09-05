@@ -83,6 +83,13 @@ after a CDK deploy. Tests set `SENTINEL_SKIP_DOTENV=1` so a developer's local
   5 with text" and "5 ratings, all with text" are different signals that the
   survivors alone cannot distinguish. Near-identical reviews are sent once and
   counted in `duplicateGroups`.
+- **Shopee's review template is stripped before the model sees a review.**
+  Tapped answers ("Quality: good", "Value for money: worth it") come from the
+  same short list for every reviewer, so they carry no signal, and a review
+  made only of them looks like feedback while saying nothing. `reviews.py`
+  strips them and re-applies the length filter to the remaining body; a known
+  label with a long answer is kept, since that is prose the buyer wrote.
+  Tested in `test_review_text.py`.
 - **Few usable reviews is missing evidence, not fraud.** The prompt says so in
   capitals, and `reviewCredibility` should sit near 50 in that case.
 - **A failed analysis must surface as `UNAVAILABLE`, never a neutral score.** A

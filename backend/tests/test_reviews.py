@@ -99,3 +99,59 @@ def test_prompt_tells_the_model_that_few_reviews_is_not_fraud():
 
     assert "REVIEW CREDIBILITY" in SYSTEM_PROMPT
     assert "NOT EVIDENCE OF FRAUD" in SYSTEM_PROMPT
+
+
+def test_template_answers_are_stripped_from_the_prompt():
+    """Shopee's tapped answers pad the text without saying anything."""
+    prompt = _describe_listing(
+        make_request(
+            reviews=[
+                CustomerReview(
+                    text=(
+                        "Quality: good\n"
+                        "Value for money: worth it\n"
+                        "Best feature(s): design\n"
+                        "Bottle arrived only half full and the label differs"
+                    ),
+                    rating=1,
+                )
+            ],
+            reviewStats=ReviewStats(totalFound=428, usable=1, discardedTooShort=421),
+        ),
+        [],
+    )
+    assert "half full" in prompt
+    assert "Value for money" not in prompt
+    assert "Best feature" not in prompt
+
+
+def test_reviews_that_are_only_template_answers_do_not_count_as_feedback():
+    """They look like written reviews and carry nothing."""
+    prompt = _describe_listing(
+        make_request(
+            reviews=[
+                CustomerReview(text="Quality: good\nValue for money: worth it", rating=5),
+                CustomerReview(text="Quality: nice\nBest feature(s): colour", rating=5),
+            ],
+            reviewStats=ReviewStats(totalFound=200, usable=2, discardedTooShort=198),
+        ),
+        [],
+    )
+    assert "none carried written text beyond the tapped template" in prompt
+    assert "missing evidence" in prompt
+
+
+def test_template_only_count_is_reported_when_some_survive():
+    prompt = _describe_listing(
+        make_request(
+            reviews=[
+                CustomerReview(text="Quality: good\nValue: worth it", rating=5),
+                CustomerReview(
+                    text="Arrived three weeks late and the box was crushed", rating=2
+                ),
+            ],
+            reviewStats=ReviewStats(totalFound=50, usable=2, discardedTooShort=48),
+        ),
+        [],
+    )
+    assert "1 contained only tapped template answers" in prompt

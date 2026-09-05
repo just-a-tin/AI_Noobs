@@ -45,6 +45,9 @@ class ReviewStats(BaseModel):
     totalFound: int = 0
     usable: int = 0
     discardedTooShort: int = 0
+    # Reviews that were nothing but tapped template answers ("Quality: good").
+    # Counted separately because they look like feedback and carry none.
+    discardedTemplateOnly: int = 0
     duplicateGroups: int = 0
     averageRating: float | None = None
 

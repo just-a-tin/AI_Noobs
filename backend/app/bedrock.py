@@ -13,6 +13,7 @@ import logging
 from .config import settings
 from .dimensions import listed_longest_cm
 from .images import PreparedImage, prepare_images
+from .reviews import is_substantive, strip_review_template
 from .mocks import mock_analysis
 from .schemas import ANALYSIS_SCHEMA, AnalysisCore, AnalyzeRequest
 
@@ -177,12 +178,28 @@ def _describe_listing(req: AnalyzeRequest, images: list[PreparedImage]) -> str:
     # matter as much as the text: hundreds of ratings with almost no written
     # content is a different signal from a handful of detailed reviews.
     stats = req.reviewStats
-    if req.reviews:
+
+    # Strip Shopee's review template before the model sees anything. The
+    # tapped answers ('Quality: good', 'Value for money: worth it') come
+    # from the same short list for every reviewer, so they pad the prompt
+    # without distinguishing an honest listing from a fraudulent one - and
+    # a review consisting only of them looks like feedback while carrying
+    # none.
+    usable_reviews = []
+    template_only = 0
+    for r in req.reviews:
+        body = strip_review_template(r.text)
+        if not is_substantive(body):
+            template_only += 1
+            continue
+        usable_reviews.append((r, body))
+
+    if usable_reviews:
         rendered = []
-        for r in req.reviews:
+        for r, body in usable_reviews:
             stars = f"{r.rating}/5" if r.rating is not None else "no rating"
             photo = ", with photo" if r.hasImages else ""
-            rendered.append(f'  - [{stars}{photo}] "{r.text}"')
+            rendered.append(f'  - [{stars}{photo}] "{body}"')
 
         extras = ""
         if stats and stats.duplicateGroups:
@@ -190,19 +207,26 @@ def _describe_listing(req: AnalyzeRequest, images: list[PreparedImage]) -> str:
         if stats and stats.averageRating is not None:
             extras += f"; average rating {stats.averageRating}"
 
-        counted = (
-            f"{stats.usable} of {stats.totalFound} carried usable text, "
-            f"{stats.discardedTooShort} were empty or too short to be informative"
-            if stats
-            else f"{len(req.reviews)} shown"
-        )
+        shown = len(usable_reviews)
+        if stats:
+            counted = (
+                f"{shown} of {stats.totalFound} carried usable written "
+                f"text, {stats.discardedTooShort} were empty or too short"
+            )
+            if template_only:
+                counted += (
+                    f", {template_only} contained only tapped template "
+                    "answers"
+                )
+        else:
+            counted = f"{shown} shown"
         joined = "\n".join(rendered)
         reviews_block = f"\nCUSTOMER REVIEWS ({counted}{extras}):\n{joined}"
-    elif stats and stats.totalFound:
+    elif (stats and stats.totalFound) or req.reviews:
         reviews_block = (
-            f"\nCUSTOMER REVIEWS: {stats.totalFound} found, but none carried "
-            "text long enough to be informative. Treat this as missing "
-            "evidence, not as a finding."
+            f"\nCUSTOMER REVIEWS: {stats.totalFound if stats else len(req.reviews)} found, but none "
+            "carried written text beyond the tapped template answers. "
+            "Treat this as missing evidence, not as a finding."
         )
     else:
         reviews_block = "\nCUSTOMER REVIEWS: none could be retrieved."
