@@ -91,6 +91,15 @@ after a CDK deploy. Tests set `SENTINEL_SKIP_DOTENV=1` so a developer's local
   strips them and re-applies the length filter to the remaining body; a known
   label with a long answer is kept, since that is prose the buyer wrote.
   Tested in `test_review_text.py`.
+- **Shopee's v4 API must be called from the PAGE's context, not the content
+  script.** An MV3 content-script fetch is attributed to the extension, and
+  Shopee answers that with a bare HTTP 403 — which silently cost us every
+  review on every listing. `src/page/api-bridge.js` runs with `world: "MAIN"`
+  and proxies the request over `postMessage`; it refuses anything not on
+  Shopee's own origin. It signals readiness with a `data-sentinel-bridge`
+  attribute rather than a message, because it runs at `document_start` and the
+  content script at `document_idle` — a message would arrive before anything
+  was listening.
 - **Ratings are paginated.** Shopee's default ordering puts empty five-star
   ratings first, so the reviews that say anything are often not on page one.
   `fromRatingsApi` walks up to `maxRatingPages` pages and stops early on a

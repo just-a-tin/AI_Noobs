@@ -1,9 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "Sentinel — Scam Shield for Shopee",
+  "name": "Sentinel \u2014 Scam Shield for Shopee",
   "version": "0.1.0",
   "description": "Analyses Shopee SG listings for bait-and-switch risk and shows a trust score before you buy.",
-  "permissions": ["storage", "activeTab"],
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
   "host_permissions": [
     "https://shopee.sg/*",
     "http://localhost:8000/*"
@@ -13,7 +16,19 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://shopee.sg/*"],
+      "matches": [
+        "https://shopee.sg/*"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "js": [
+        "src/page/api-bridge.js"
+      ]
+    },
+    {
+      "matches": [
+        "https://shopee.sg/*"
+      ],
       "run_at": "document_idle",
       "js": [
         "src/shared/config.js",

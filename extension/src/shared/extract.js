@@ -29,6 +29,93 @@
     return raw / config.priceScale;
   }
 
+  // --- Page-context fetch ---------------------------------------------------
+
+  const API_CHANNEL = "__sentinel_api__";
+  let requestSeq = 0;
+
+  /**
+   * Is the page-context bridge loaded?
+   *
+   * Read from the DOM rather than a "ready" message: the bridge runs at
+   * document_start and this script at document_idle, so any announcement
+   * would have been posted before anything was listening. The DOM is the one
+   * thing the two JavaScript worlds share.
+   */
+  function bridgeAvailable() {
+    return document.documentElement.hasAttribute("data-sentinel-bridge");
+  }
+
+  /**
+   * Fetch a Shopee API URL from the page's own JavaScript context.
+   *
+   * A fetch issued from a content script is attributed to the extension, and
+   * Shopee's v4 API answers that with a bare HTTP 403. Routed through the
+   * MAIN-world bridge it is an ordinary same-origin request and succeeds.
+   * Falls back to a direct fetch if the bridge did not load, so an older
+   * unpacked build still limps along rather than failing outright.
+   */
+  function pageFetchJson(url, timeoutMs = 12000) {
+    return new Promise((resolve, reject) => {
+      const id = `${Date.now()}-${++requestSeq}`;
+      let settled = false;
+
+      const onMessage = (event) => {
+        const msg = event.data;
+        if (event.source !== window) return;
+        if (msg?.channel !== API_CHANNEL || msg.kind !== "response") return;
+        if (msg.id !== id) return;
+
+        settled = true;
+        window.removeEventListener("message", onMessage);
+        clearTimeout(timer);
+
+        if (msg.error) return reject(new Error(msg.error));
+        if (!msg.ok) return reject(new Error(`HTTP ${msg.status}`));
+        try {
+          resolve(JSON.parse(msg.body));
+        } catch {
+          reject(new Error("response was not JSON"));
+        }
+      };
+
+      const timer = setTimeout(() => {
+        if (settled) return;
+        window.removeEventListener("message", onMessage);
+        // The bridge never answered — try directly rather than give up.
+        directFetchJson(url).then(resolve, reject);
+      }, timeoutMs);
+
+      window.addEventListener("message", onMessage);
+      window.postMessage(
+        { channel: API_CHANNEL, kind: "request", id, url },
+        window.location.origin
+      );
+    });
+  }
+
+  async function directFetchJson(url) {
+    const response = await fetch(url, {
+      credentials: "include",
+      headers: { "x-api-source": "pc", "x-requested-with": "XMLHttpRequest" },
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+  }
+
+  /** Bridge when it is there, direct fetch when it is not. */
+  function apiFetchJson(url) {
+    if (!bridgeAvailable()) {
+      console.warn(
+        "[Sentinel] page bridge not loaded — falling back to a direct fetch," +
+          " which Shopee's API usually answers with 403. Reload the extension" +
+          " at chrome://extensions, then refresh this page."
+      );
+      return directFetchJson(url);
+    }
+    return pageFetchJson(url);
+  }
+
   // --- Layer 1: PDP JSON API -----------------------------------------------
 
   async function fromPdpApi({ itemId, shopId }) {
@@ -36,13 +123,9 @@
       .replace("{itemId}", itemId)
       .replace("{shopId}", shopId);
 
-    const response = await fetch(url, {
-      credentials: "include",
-      headers: { "x-api-source": "pc", "x-requested-with": "XMLHttpRequest" },
+    const body = await apiFetchJson(url).catch((err) => {
+      throw new Error(`PDP API ${err.message}`);
     });
-    if (!response.ok) throw new Error(`PDP API ${response.status}`);
-
-    const body = await response.json();
     const item = body?.data?.item ?? body?.item;
     if (!item) throw new Error("PDP API returned no item");
 
@@ -186,15 +269,9 @@
       .replace("{limit}", String(limit))
       .replace("{offset}", String(offset));
 
-    const response = await fetch(url, {
-      credentials: "include",
-      headers: { "x-api-source": "pc", "x-requested-with": "XMLHttpRequest" },
+    const body = await apiFetchJson(url).catch((err) => {
+      throw new Error(`ratings API ${err.message} (offset ${offset})`);
     });
-    if (!response.ok) {
-      throw new Error(`ratings API HTTP ${response.status} (offset ${offset})`);
-    }
-
-    const body = await response.json();
 
     // Shopee answers 200 with an error code in the body, so a raw status
     // check is not enough to know the call worked.
