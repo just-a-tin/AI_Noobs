@@ -69,6 +69,13 @@ after a CDK deploy. Tests set `SENTINEL_SKIP_DOTENV=1` so a developer's local
   field's own description beside its `$ref`; replacing drops it and leaves only
   the referenced class's docstring. This silently ate the "MUST be NONE" rule
   once. `test_schema_hygiene.py::test_ref_fields_keep_their_own_description`.
+- **Only product imagery may reach the model.** Everything on a Shopee page is
+  served from `susercontent.com` — avatars, vouchers, category icons, 11.11
+  banners, the "you may also like" carousel. `rejectionReason()` in
+  `extract.js` filters on rendered size, aspect ratio, page-furniture
+  ancestors, circular border-radius and links to *other* product ids. A verdict
+  about someone's profile picture is worse than no verdict. The fixture page
+  carries one of each distractor and the harness asserts none leak through.
 - **A failed analysis must surface as `UNAVAILABLE`, never a neutral score.** A
   trust product must not imply "fine" when it means "unknown".
 - Backend calls go through the **service worker**, not the content script

@@ -169,6 +169,65 @@
     return specs;
   }
 
+  // Everything on a Shopee page is served from susercontent.com — the user's
+  // own avatar, voucher tiles, category icons, promotional banners and the
+  // "you may also like" carousel included. Sending those to the model is worse
+  // than sending nothing: it reports on a profile picture instead of the
+  // product, and the whole verdict becomes nonsense.
+  const AVATAR_HINT = /avatar|profile|portrait|logo|badge|icon|banner|voucher|promo|ads?\b|shopee/i;
+
+  // Review thumbnails render around 80px; commenter avatars around 40px.
+  const MIN_RENDERED_PX = 64;
+  // Banners are far wider than tall. Product photography is roughly square.
+  const MIN_RATIO = 0.45;
+  const MAX_RATIO = 2.2;
+
+  /** Why this image is not product imagery, or null if it qualifies. */
+  function rejectionReason(img) {
+    const rect = img.getBoundingClientRect();
+    // Fall back to intrinsic size for images not yet laid out.
+    const w = Math.round(rect.width) || img.naturalWidth;
+    const h = Math.round(rect.height) || img.naturalHeight;
+
+    if (!w || !h) return "no size";
+    if (w < MIN_RENDERED_PX || h < MIN_RENDERED_PX) return "too small (icon/avatar)";
+
+    const ratio = w / h;
+    if (ratio > MAX_RATIO) return "too wide (banner)";
+    if (ratio < MIN_RATIO) return "too tall (banner)";
+
+    // Site chrome: headers, navigation, footers, floating toolbars.
+    if (img.closest("header, nav, footer, [role='banner'], [role='navigation']")) {
+      return "page furniture";
+    }
+
+    // Avatars are circular far more often than product photos are.
+    const radius = getComputedStyle(img).borderRadius || "";
+    if (/^(50%|9999px|[5-9]\d%)/.test(radius)) return "circular (avatar)";
+
+    // A link to a DIFFERENT product means a recommendation or advert, not
+    // this listing. The current product's own id is allowed through.
+    const href = img.closest("a[href]")?.getAttribute("href") || "";
+    const linked = config.productUrlPattern.exec(href);
+    if (linked) {
+      const here = parseProductUrl();
+      if (!here || linked[2] !== here.itemId) return "links to another product";
+    }
+
+    // Last resort, and deliberately weak: Shopee's class names are obfuscated,
+    // but alt text and ARIA labels sometimes still say what a thing is.
+    const described = [
+      img.alt,
+      img.getAttribute("aria-label"),
+      img.closest("[aria-label]")?.getAttribute("aria-label"),
+    ]
+      .filter(Boolean)
+      .join(" ");
+    if (described && AVATAR_HINT.test(described)) return "labelled as non-product";
+
+    return null;
+  }
+
   /**
    * Split product images from customer review photos.
    *
@@ -194,13 +253,17 @@
     const gallery = [];
     const review = [];
     const seen = new Set();
+    const rejected = [];
 
     for (const img of document.querySelectorAll("img")) {
       const src = img.currentSrc || img.src;
       if (!src || !src.includes("susercontent.com")) continue;
-      // naturalWidth is 0 for images that have not loaded; only skip when we
-      // positively know the image is icon-sized.
-      if (img.naturalWidth && img.naturalWidth < 100) continue;
+
+      const reason = rejectionReason(img);
+      if (reason) {
+        rejected.push({ reason, src: src.slice(-40) });
+        continue;
+      }
 
       const url = src.split("_tn")[0];
       if (seen.has(url)) continue;
@@ -212,6 +275,12 @@
           Node.DOCUMENT_POSITION_FOLLOWING;
 
       (isAfterAnchor ? review : gallery).push(url);
+    }
+
+    if (rejected.length) {
+      const counts = {};
+      for (const r of rejected) counts[r.reason] = (counts[r.reason] || 0) + 1;
+      console.info("[Sentinel] filtered out non-product images:", counts);
     }
 
     return { gallery, review };

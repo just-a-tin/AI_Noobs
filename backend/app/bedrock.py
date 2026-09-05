@@ -97,6 +97,15 @@ the four sub-scores, weighted by which evidence is strongest, rather than a \
 strict average. A confirmed scale mismatch is strong evidence of deliberate \
 deception and should weigh heavily; an undeterminable scale should not.
 
+IGNORE IMAGES THAT ARE NOT THE PRODUCT. Scraped pages sometimes include a \
+user's profile picture, a marketplace promotional banner, a voucher tile, a \
+category icon or an unrelated recommended product. Silently disregard any such \
+image: do not describe it, do not treat it as a discrepancy, and do not let it \
+influence any score. If after discarding them no genuine product imagery \
+remains, say so plainly in the findings, keep visualIntegrity near 50 and set \
+scaleConfidence to NONE - an unusable image set is missing evidence, not \
+evidence of fraud.
+
 Write findings as specific, concrete observations a shopper could verify \
 themselves - not generic safety advice. If evidence is thin or images are \
 missing, say so in the findings and score nearer the middle rather than \

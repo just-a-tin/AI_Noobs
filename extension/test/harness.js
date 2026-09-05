@@ -36,6 +36,19 @@
     ],
   ];
 
+  // Non-product images must never reach the model: a verdict about someone's
+  // profile picture or a 11.11 banner is worse than no verdict at all.
+  const allImages = [...listing.imageUrls, ...listing.reviewImageUrls];
+  for (const [label, needle] of [
+    ["avatar filtered out", "user-avatar"],
+    ["promo banner filtered out", "promo-banner"],
+    ["header logo filtered out", "header-logo"],
+    ["recommendation filtered out", "recommended-item"],
+  ]) {
+    const leaked = allImages.filter((u) => u.includes(needle));
+    checks.push([label, leaked.length ? leaked.join(", ") : "clean", !leaked.length]);
+  }
+
   rows.innerHTML =
     checks.map(([k, v, ok]) => line(k, `${v} ${ok ? "✓" : "✗"}`, ok)).join("") +
     line("specs", JSON.stringify(listing.specs)) +
