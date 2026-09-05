@@ -7,9 +7,11 @@ from app.schemas import (
     AnalysisResult,
     AnalyzeRequest,
     ImageAnalysis,
+    ReferenceAgreement,
     RiskLevel,
     ScaleAnalysis,
     ScaleConfidence,
+    SceneReference,
     SubScores,
 )
 
@@ -41,7 +43,12 @@ def make_result(score: int = 80) -> AnalysisResult:
         scaleAnalysis=ScaleAnalysis(
             identifiedProduct="wireless earbuds",
             scaleConfidence=ScaleConfidence.HIGH,
-            scaleReference="adult hand",
+            sceneReferences=[
+                SceneReference(
+                    objectName="adult hand", assumedRealCm=18.0, impliedProductCm=6.1
+                )
+            ],
+            referenceAgreement=ReferenceAgreement.SINGLE,
             expectedLongestCm=6.0,
             apparentLongestCm=6.1,
             mismatchDetected=False,

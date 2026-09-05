@@ -77,6 +77,21 @@ li { margin-bottom: 5px; }
 .size-why { font-size: 11px; color: #334155; line-height: 1.5; }
 .size-ref { font-size: 10px; color: #94a3b8; margin-top: 6px; }
 
+/* Per-object scale breakdown */
+.refs { margin-top: 9px; padding: 9px 10px; border-radius: 8px; background: #f8fafc; }
+.refs.conflict { background: #fef2f2; }
+.ref-head {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
+  color: #64748b; margin-bottom: 6px; font-weight: 600;
+}
+.refs.conflict .ref-head { color: #b91c1c; }
+.ref-row {
+  display: flex; justify-content: space-between; gap: 8px;
+  font-size: 11px; color: #475569; padding: 3px 0;
+}
+.ref-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ref-implies { color: #0f172a; font-weight: 600; flex: none; }
+
 .flag {
   display: flex; gap: 7px; padding: 9px 10px; border-radius: 8px;
   background: #fef2f2; color: #991b1b; font-size: 11px; margin-top: 12px;

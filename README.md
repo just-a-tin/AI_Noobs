@@ -44,11 +44,33 @@ up is pixel-for-pixel identical to a full-size object shot from further away.
 Estimating apparent size therefore requires something of known size in the same
 frame — a hand, a coin, a doorway, a person.
 
+So the model inventories *every* usable object in the scene and reports what
+each independently implies about the product:
+
+```
+two-seat sofa in gallery image         -> 175 cm
+adult hand in customer review photo    ->  22 cm
+dining table in customer review photo  ->  24 cm
+```
+
 When no such reference exists, `scaleConfidence` is `NONE`, the estimates are
 `null`, and the UI says the size could not be verified. It does not guess, and
 it does not treat "unknown" as either reassuring or damning. Listings with only
 white-background studio shots are extremely common and are not suspicious for
 lacking scale cues.
+
+### Conflicting references mean the image is fake
+
+Reading several objects at once buys a second, independent signal. If a person
+in the frame implies the product is 95 cm but a wall socket in the *same* frame
+implies 34 cm, no real photograph can produce both — the image has been
+composited or generated.
+
+That is reported as `referenceAgreement: CONFLICT`, and it is a different
+finding from the product merely being smaller than advertised: it catches a
+doctored image even when the listing's stated size is honest. Tolerance is
+deliberately generous, since perspective and lens choice shift apparent sizes
+legitimately.
 
 ---
 

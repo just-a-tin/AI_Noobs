@@ -64,12 +64,37 @@ def test_scale_estimates_are_nullable():
     must be able to answer 'unknown' rather than invent a number."""
     scale = ANALYSIS_SCHEMA["properties"]["scaleAnalysis"]["properties"]
 
-    for nullable in ("scaleReference", "expectedLongestCm", "apparentLongestCm"):
-        rendered = repr(scale[nullable])
-        assert "null" in rendered, f"{nullable} must permit null"
+    for nullable in ("expectedLongestCm", "apparentLongestCm"):
+        assert "null" in repr(scale[nullable]), f"{nullable} must permit null"
 
     # The confidence enum must offer an explicit "cannot tell" value.
     assert "NONE" in repr(scale["scaleConfidence"])
+
+
+def test_scene_references_are_a_list_of_measurements():
+    """Reading several objects at once is what makes cross-checking possible;
+    a single reference cannot contradict itself."""
+    scale = ANALYSIS_SCHEMA["properties"]["scaleAnalysis"]["properties"]
+    refs = scale["sceneReferences"]
+
+    assert refs["type"] == "array"
+    assert set(refs["items"]["properties"]) == {
+        "objectName",
+        "assumedRealCm",
+        "impliedProductCm",
+    }
+
+
+def test_reference_agreement_can_express_conflict():
+    """Objects in frame implying incompatible sizes means the image itself is
+    composited — a distinct signal from the product being undersized."""
+    scale = ANALYSIS_SCHEMA["properties"]["scaleAnalysis"]["properties"]
+    assert set(scale["referenceAgreement"]["enum"]) == {
+        "NONE",
+        "SINGLE",
+        "AGREE",
+        "CONFLICT",
+    }
 
 
 def test_mock_verdicts_validate_against_model():

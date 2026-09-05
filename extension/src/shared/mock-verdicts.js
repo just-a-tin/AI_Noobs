@@ -21,12 +21,16 @@
       scaleAnalysis: {
         identifiedProduct: "wireless earbuds charging case",
         scaleConfidence: "HIGH",
-        scaleReference: "adult hand holding the case",
+        sceneReferences: [
+          { objectName: "adult hand holding the case", assumedRealCm: 18, impliedProductCm: 6.2 },
+          { objectName: "desk keyboard beside the case", assumedRealCm: 44, impliedProductCm: 6 },
+        ],
+        referenceAgreement: "AGREE",
         expectedLongestCm: 6,
-        apparentLongestCm: 6.2,
+        apparentLongestCm: 6.1,
         mismatchDetected: false,
         explanation:
-          "A review photo shows the case held in an adult hand, spanning about a third of the palm — roughly 6 cm, matching the listed size.",
+          "A review photo shows the case in an adult hand at about 6 cm, and a second photo beside a keyboard agrees. Both match the listed size.",
       },
       findings: [
         "Gallery images and customer review photos show a consistent product.",
@@ -52,14 +56,19 @@
         scaleFidelity: 50,
       },
       scaleAnalysis: {
-        identifiedProduct: "compact bluetooth speaker",
-        scaleConfidence: "NONE",
-        scaleReference: null,
-        expectedLongestCm: 12,
-        apparentLongestCm: null,
-        mismatchDetected: false,
+        identifiedProduct: "floor-standing air purifier",
+        scaleConfidence: "MEDIUM",
+        sceneReferences: [
+          { objectName: "adult person beside the unit", assumedRealCm: 170, impliedProductCm: 95 },
+          { objectName: "wall power socket behind it", assumedRealCm: 12, impliedProductCm: 34 },
+          { objectName: "interior doorway in background", assumedRealCm: 200, impliedProductCm: 88 },
+        ],
+        referenceAgreement: "CONFLICT",
+        expectedLongestCm: 70,
+        apparentLongestCm: 90,
+        mismatchDetected: true,
         explanation:
-          "Every image is a studio shot on plain white with nothing of known size in frame, so the real size cannot be determined from the photos. Common, and not suspicious in itself.",
+          "The person and doorway both put the unit near 90 cm, but the wall socket implies only 34 cm. No single real photograph can satisfy both, so the product was likely composited into the room scene.",
       },
       findings: [
         "Title claims 'aluminium body' while the spec table says ABS plastic.",
@@ -90,12 +99,17 @@
       scaleAnalysis: {
         identifiedProduct: "artificial Christmas tree",
         scaleConfidence: "HIGH",
-        scaleReference: "adult hand in customer review photo",
+        sceneReferences: [
+          { objectName: "two-seat sofa in gallery image", assumedRealCm: 180, impliedProductCm: 175 },
+          { objectName: "adult hand in review photo", assumedRealCm: 18, impliedProductCm: 22 },
+          { objectName: "dining table in review photo", assumedRealCm: 75, impliedProductCm: 24 },
+        ],
+        referenceAgreement: "AGREE",
         expectedLongestCm: 180,
         apparentLongestCm: 22,
         mismatchDetected: true,
         explanation:
-          "Gallery images stage the tree beside a sofa, implying about 180 cm. A review photo shows the delivered item held in one hand — barely 22 cm. The photography is staged to make a desk ornament look like full-sized furniture.",
+          "The gallery stages the tree beside a sofa, implying 175 cm. Every review photo disagrees: 22 cm against a hand, 24 cm against a dining table. The review photos agree with each other, so the gallery is staged to make a desk ornament look like furniture.",
       },
       findings: [
         "Listing implies a 180 cm tree, but review photos show buyers holding a 22 cm version in one hand.",

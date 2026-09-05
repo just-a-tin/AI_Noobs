@@ -22,8 +22,10 @@ from .schemas import (
     AnalysisCore,
     AnalyzeRequest,
     ImageAnalysis,
+    ReferenceAgreement,
     ScaleAnalysis,
     ScaleConfidence,
+    SceneReference,
     SubScores,
 )
 
@@ -35,15 +37,27 @@ _CLEAN = AnalysisCore(
     scaleAnalysis=ScaleAnalysis(
         identifiedProduct="wireless earbuds charging case",
         scaleConfidence=ScaleConfidence.HIGH,
-        scaleReference="adult hand holding the case",
+        sceneReferences=[
+            SceneReference(
+                objectName="adult hand holding the case",
+                assumedRealCm=18.0,
+                impliedProductCm=6.2,
+            ),
+            SceneReference(
+                objectName="desk keyboard beside the case",
+                assumedRealCm=44.0,
+                impliedProductCm=6.0,
+            ),
+        ],
+        referenceAgreement=ReferenceAgreement.AGREE,
         expectedLongestCm=6.0,
-        apparentLongestCm=6.2,
+        apparentLongestCm=6.1,
         mismatchDetected=False,
         explanation=(
-            "One review photo shows the case held in an adult hand, spanning "
-            "roughly a third of the palm width. That puts it near 6 cm, which "
-            "matches both the listed dimensions and the normal size for this "
-            "product."
+            "A review photo shows the case held in an adult hand, spanning "
+            "about a third of the palm — near 6 cm. A second photo beside a "
+            "keyboard gives the same answer. Both agree with the listed "
+            "dimensions and with normal size for this product."
         ),
     ),
     findings=[
@@ -70,23 +84,41 @@ _SPEC_MISMATCH = AnalysisCore(
         visualIntegrity=74, specConsistency=38, priceSanity=61, scaleFidelity=50
     ),
     scaleAnalysis=ScaleAnalysis(
-        identifiedProduct="compact bluetooth speaker",
-        # The common, honest case: studio shots on white with nothing for scale.
-        scaleConfidence=ScaleConfidence.NONE,
-        scaleReference=None,
-        expectedLongestCm=12.0,
-        apparentLongestCm=None,
-        mismatchDetected=False,
+        identifiedProduct="floor-standing air purifier",
+        # Objects in frame contradict each other: the photo is a composite.
+        scaleConfidence=ScaleConfidence.MEDIUM,
+        sceneReferences=[
+            SceneReference(
+                objectName="adult person standing beside the unit",
+                assumedRealCm=170.0,
+                impliedProductCm=95.0,
+            ),
+            SceneReference(
+                objectName="wall power socket behind the unit",
+                assumedRealCm=12.0,
+                impliedProductCm=34.0,
+            ),
+            SceneReference(
+                objectName="interior doorway in background",
+                assumedRealCm=200.0,
+                impliedProductCm=88.0,
+            ),
+        ],
+        referenceAgreement=ReferenceAgreement.CONFLICT,
+        expectedLongestCm=70.0,
+        apparentLongestCm=90.0,
+        mismatchDetected=True,
         explanation=(
-            "All images are studio shots on a plain white background with no "
-            "object of known size in frame, so the product's real size cannot "
-            "be determined from them. This is common and not suspicious in "
-            "itself, but it means size could not be verified."
+            "The person and the doorway both put the unit near 90 cm, but the "
+            "wall socket behind it implies only 34 cm. No single real "
+            "photograph can satisfy both, so the product has most likely been "
+            "composited into a room scene at an exaggerated size."
         ),
     ),
     findings=[
-        "Listed weight (2.4 kg) is inconsistent with the stated dimensions and "
-        "material for this product class.",
+        "Objects in the main image contradict each other: a person and a "
+        "doorway imply a 90 cm unit, while the wall socket implies 34 cm. The "
+        "room scene appears to be composited.",
         "Title claims 'aluminium body' while the specification table says ABS plastic.",
         "Review photos show a product that broadly matches, but with different "
         "port placement from the gallery images.",
@@ -95,9 +127,10 @@ _SPEC_MISMATCH = AnalysisCore(
         isAiGenerated=False,
         visualDiscrepancyDetected=True,
         explanation=(
-            "Gallery images appear to be genuine manufacturer renders, but the "
-            "port layout differs from every customer review photo, suggesting the "
-            "listing reuses imagery from a different model variant."
+            "The lifestyle shot is internally inconsistent — the product's size "
+            "relative to the wall socket does not agree with its size relative "
+            "to the person or the doorway. That geometry cannot occur in a "
+            "single real photograph, indicating the product was composited in."
         ),
     ),
     specDiscrepancies=[
@@ -114,16 +147,35 @@ _BAIT_AND_SWITCH = AnalysisCore(
     scaleAnalysis=ScaleAnalysis(
         identifiedProduct="artificial Christmas tree",
         scaleConfidence=ScaleConfidence.HIGH,
-        scaleReference="adult hand in customer review photo",
+        sceneReferences=[
+            SceneReference(
+                objectName="two-seat sofa in gallery image",
+                assumedRealCm=180.0,
+                impliedProductCm=175.0,
+            ),
+            SceneReference(
+                objectName="adult hand in customer review photo",
+                assumedRealCm=18.0,
+                impliedProductCm=22.0,
+            ),
+            SceneReference(
+                objectName="dining table in customer review photo",
+                assumedRealCm=75.0,
+                impliedProductCm=24.0,
+            ),
+        ],
+        # Gallery and review photos disagree, but each is internally coherent:
+        # this is a staging lie about the product, not a doctored image.
+        referenceAgreement=ReferenceAgreement.AGREE,
         expectedLongestCm=180.0,
         apparentLongestCm=22.0,
         mismatchDetected=True,
         explanation=(
-            "Gallery images show the tree beside a sofa, implying roughly 180 "
-            "cm. But a customer review photo shows the delivered item held in "
-            "one hand, spanning barely the width of a palm — about 22 cm. The "
-            "gallery photography is staged to make a desk ornament look like "
-            "full-sized furniture."
+            "The seller's gallery stages the tree beside a sofa, implying "
+            "about 175 cm. Every customer review photo tells a different "
+            "story: against a hand it is 22 cm, against a dining table 24 cm. "
+            "The review photos agree with each other, so the gallery is "
+            "staged to make a desk ornament look like full-sized furniture."
         ),
     ),
     findings=[

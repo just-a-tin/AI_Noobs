@@ -19,6 +19,15 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 os.environ.setdefault("MOCK_AWS", "true")
 
+# On Windows, stdout defaults to cp1252 when piped or redirected, and the box
+# and arrow characters below raise UnicodeEncodeError. The console happens to
+# be UTF-8, so this only breaks the moment someone pipes the output to a file
+# or a pager — which is exactly when they are trying to share a failure.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, OSError):  # pragma: no cover - very old or odd stdout
+    pass
+
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app.main import app  # noqa: E402
@@ -116,10 +125,22 @@ def main() -> int:
         claim = result.get("listedLongestCm") or sa["expectedLongestCm"]
         arrow = f"{claim:g} cm -> " if claim else ""
         marker = f"{RED}MISMATCH{RESET}" if sa["mismatchDetected"] else f"{GREEN}ok{RESET}"
-        print(
-            f"    {arrow}{sa['apparentLongestCm']:g} cm in photos  [{marker}]"
-            f"  (ref: {sa['scaleReference']})"
-        )
+        print(f"    {arrow}{sa['apparentLongestCm']:g} cm in photos  [{marker}]")
+
+        refs = sa.get("sceneReferences") or []
+        if refs:
+            conflict = sa["referenceAgreement"] == "CONFLICT"
+            header = (
+                f"{RED}objects in frame contradict each other{RESET}"
+                if conflict
+                else "what each object in frame implies"
+            )
+            print(f"    {DIM}{header}{RESET}")
+            for ref in refs:
+                print(
+                    f"      {ref['objectName']:<38} -> "
+                    f"{ref['impliedProductCm']:g} cm"
+                )
     print(f"{DIM}    {sa['explanation']}{RESET}\n")
 
     for finding in result["findings"]:
@@ -153,6 +174,10 @@ def main() -> int:
             check(
                 "scale estimate is null unless a reference was found",
                 (sa["scaleConfidence"] == "NONE") == (sa["apparentLongestCm"] is None),
+            ),
+            check(
+                "scene references reported per object",
+                (sa["scaleConfidence"] == "NONE") or bool(sa["sceneReferences"]),
             ),
             check("repeat request served from cache", second["cached"] is True),
             check("price change busts the cache", moved["cached"] is False),

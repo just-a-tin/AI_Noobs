@@ -51,6 +51,31 @@
   host.style.cssText = "position:fixed;right:20px;bottom:20px;z-index:99999;";
   document.body.appendChild(host);
 
+  // What each object in the frame independently implies about the product.
+  // Disagreement between them is itself the finding: one real photograph
+  // cannot produce contradictory scales.
+  const refRows = (sa) => {
+    const refs = sa.sceneReferences || [];
+    if (!refs.length) return "";
+    const conflict = sa.referenceAgreement === "CONFLICT";
+    const rows = refs
+      .map(
+        (r) => `<div style="display:flex;justify-content:space-between;gap:8px;
+                            font-size:11px;color:#475569;padding:2px 0">
+                  <span>${r.objectName}</span>
+                  <b style="color:#0f172a">${r.impliedProductCm} cm</b>
+                </div>`
+      )
+      .join("");
+    return `<div style="margin-top:8px;padding-top:8px;
+                        border-top:1px solid ${conflict ? "#fca5a5" : "#e2e8f0"}">
+              <div style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;
+                          color:${conflict ? "#b91c1c" : "#64748b"};margin-bottom:5px">
+                ${conflict ? "⚠ Objects in frame contradict each other" : "Measured against"}
+              </div>${rows}
+            </div>`;
+  };
+
   const sizePanel = (v) => {
     const sa = v.scaleAnalysis;
     if (!sa) return "";
@@ -68,8 +93,7 @@
                 <b style="font-size:18px;color:#0f172a">${sa.apparentLongestCm} cm</b>
               </div>
               <div style="font-size:11px;color:#334155;line-height:1.5">${sa.explanation}</div>
-              ${sa.scaleReference ? `<div style="font-size:10px;color:#94a3b8;margin-top:5px">
-                 Measured against ${sa.scaleReference}</div>` : ""}
+              ${refRows(sa)}
             </div>`;
   };
 

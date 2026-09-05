@@ -45,7 +45,8 @@ def test_analyze_returns_full_contract():
     assert set(body["scaleAnalysis"]) == {
         "identifiedProduct",
         "scaleConfidence",
-        "scaleReference",
+        "sceneReferences",
+        "referenceAgreement",
         "expectedLongestCm",
         "apparentLongestCm",
         "mismatchDetected",

@@ -16,6 +16,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
+# Windows pipes stdout as cp1252, which cannot encode the arrows below. This
+# script's output is the thing people paste when asking for help, so it must
+# survive being redirected to a file.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, OSError):  # pragma: no cover
+    pass
+
 from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv(ROOT / ".env")

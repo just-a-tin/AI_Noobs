@@ -83,6 +83,19 @@
       .size-cmp s { color: #94a3b8; }
       .size-note { font-size: 11px; color: #475569; }
       .size-ref { font-size: 10px; color: #94a3b8; margin-top: 5px; }
+      .refs { margin-top: 8px; padding-top: 8px; border-top: 1px solid #e2e8f0; }
+      .refs.conflict { border-top-color: #fca5a5; }
+      .ref-head {
+        font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
+        color: #64748b; margin-bottom: 5px;
+      }
+      .refs.conflict .ref-head { color: #b91c1c; }
+      .ref-row {
+        display: flex; justify-content: space-between; gap: 8px;
+        font-size: 11px; color: #475569; padding: 2px 0;
+      }
+      .ref-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .ref-implies { color: #0f172a; font-weight: 600; flex: none; }
       .spinner {
         width: 16px; height: 16px; border-radius: 50%;
         border: 2px solid #cbd5e1; border-top-color: #475569;
@@ -154,6 +167,22 @@
         </div>`;
     }
 
+    const refs = sa.sceneReferences || [];
+    const conflict = sa.referenceAgreement === "CONFLICT";
+
+    // Show what each object in the scene independently implies. When they
+    // disagree, that disagreement is the finding — a single real photograph
+    // cannot produce contradictory scales.
+    const refRows = refs
+      .map(
+        (r) => `
+        <div class="ref-row">
+          <span class="ref-name">${escapeHtml(r.objectName)}</span>
+          <span class="ref-implies">→ ${(+r.impliedProductCm).toFixed(0)} cm</span>
+        </div>`
+      )
+      .join("");
+
     const claim = listed || expected;
     return `
       <div class="size">
@@ -166,12 +195,18 @@
         </div>
         <div class="size-note">${escapeHtml(sa.explanation || "")}</div>
         ${
-          sa.scaleReference
-            ? `<div class="size-ref">Measured against: ${escapeHtml(
-                sa.scaleReference
-              )} · confidence ${escapeHtml(sa.scaleConfidence)}</div>`
+          refs.length
+            ? `<div class="refs ${conflict ? "conflict" : ""}">
+                 <div class="ref-head">${
+                   conflict
+                     ? "⚠ Objects in frame contradict each other"
+                     : "Measured against"
+                 }</div>
+                 ${refRows}
+               </div>`
             : ""
         }
+        <div class="size-ref">Confidence ${escapeHtml(sa.scaleConfidence)}</div>
       </div>`;
   }
 

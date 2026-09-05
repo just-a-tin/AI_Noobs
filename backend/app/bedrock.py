@@ -55,17 +55,31 @@ version. Triangulate three numbers:
        measures in the real world.
    (c) APPARENT - how big the product looks in the images.
 
-   To judge (c) you MUST find something of known real size in the same frame: \
-a hand (~18 cm), a finger, a coin, a phone, a keyboard, a mug, a power socket, \
-a doorway, a person, floor tiles, a ruler. Estimate the product against that \
-reference, and name the reference you used.
+   To judge (c), read the whole scene. Inventory every object in the frame \
+whose real-world size you know - a person (~170 cm), a hand (~18 cm), a \
+doorway (~200 cm), a sofa (~180 cm), a coin, a phone, a keyboard, a mug, a \
+power socket, floor tiles, a ruler - and for EACH one work out what size the \
+product would have to be if that object is the size you expect. Report every \
+usable reference you find in sceneReferences, not just the best one.
 
    CRITICAL: absolute size cannot be recovered from a photograph without such \
 a reference. A miniature photographed close up is pixel-for-pixel identical to \
-a full-size object photographed further away. If no reference object is in \
-frame, set scaleConfidence to NONE, leave apparentLongestCm null, and say so \
-in the explanation. Do not guess a number, and do not treat a missing estimate \
-as either reassuring or damning - score scaleFidelity around 50.
+a full-size object photographed further away. If nothing in frame has a \
+knowable real size, set scaleConfidence to NONE, leave sceneReferences empty \
+and apparentLongestCm null, and say so. Do not guess a number, and do not \
+treat a missing estimate as either reassuring or damning - score \
+scaleFidelity around 50.
+
+   CROSS-CHECK THE REFERENCES AGAINST EACH OTHER. If a person in the image \
+implies the product is 30 cm but a doorway in the same image implies it is \
+200 cm, no real photograph could produce both - the image has been composited \
+or generated. Set referenceAgreement to CONFLICT and lower visualIntegrity as \
+well as scaleFidelity. This is a separate finding from the product simply \
+being smaller than advertised, and it holds even when the listing's stated \
+size is honest. Allow generous tolerance before calling CONFLICT: perspective, \
+camera lens choice and an object being nearer or further from the camera all \
+shift apparent sizes legitimately. Only flag disagreements too large for \
+those to explain.
 
    Report a mismatch only when the disagreement is large enough to actually \
 mislead a buyer. Manufacturing tolerance, packaging-versus-product size, and \

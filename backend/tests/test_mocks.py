@@ -50,6 +50,39 @@ def test_moderate_discount_is_not_treated_as_fraud():
     assert derive_risk_level(result.overallTrustScore) is not RiskLevel.HIGH
 
 
+def test_scene_references_are_internally_consistent():
+    """Every persona's numbers must hold up if a judge reads them closely."""
+    from app.mocks import _PERSONAS
+
+    for persona in _PERSONAS:
+        sa = persona.scaleAnalysis
+        if sa.scaleConfidence.value == "NONE":
+            assert sa.sceneReferences == []
+            assert sa.apparentLongestCm is None
+            continue
+
+        assert sa.sceneReferences, "a non-NONE confidence needs references"
+        for ref in sa.sceneReferences:
+            assert ref.assumedRealCm > 0
+            assert ref.impliedProductCm > 0
+
+        expected_agreement = "SINGLE" if len(sa.sceneReferences) == 1 else None
+        if expected_agreement:
+            assert sa.referenceAgreement.value == expected_agreement
+
+
+def test_conflicting_references_are_flagged_as_conflict():
+    """A persona whose references disagree must say CONFLICT — that is the
+    signal that the image is composited rather than merely unflattering."""
+    from app.mocks import _SPEC_MISMATCH
+
+    sa = _SPEC_MISMATCH.scaleAnalysis
+    implied = [r.impliedProductCm for r in sa.sceneReferences]
+
+    assert sa.referenceAgreement.value == "CONFLICT"
+    assert max(implied) / min(implied) > 2, "conflict persona should disagree sharply"
+
+
 def test_unremarkable_listings_spread_across_personas():
     """With no signals, hashing should still exercise all three states."""
     levels = {

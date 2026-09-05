@@ -56,9 +56,15 @@ after a CDK deploy. Tests set `SENTINEL_SKIP_DOTENV=1` so a developer's local
   listings mutate after banking reviews.
 - **Scale estimates must be null without a reference object.** Absolute size is
   not recoverable from a photo; only size *relative to something of known size
-  in frame* is. `scaleConfidence: NONE` with null estimates is the correct
-  answer for white-background studio shots, and must not be scored as either
-  pass or fail. Guarded by `test_schema.py::test_scale_estimates_are_nullable`.
+  in frame* is. `scaleConfidence: NONE` with empty `sceneReferences` and null
+  estimates is the correct answer for white-background studio shots, and must
+  not be scored as either pass or fail.
+  Guarded by `test_schema.py::test_scale_estimates_are_nullable`.
+- **`sceneReferences` is a list on purpose.** Reading several objects at once
+  cross-checks the estimate *and* yields a second signal: references implying
+  incompatible sizes (`referenceAgreement: CONFLICT`) means the image is a
+  composite, which is distinct from the product being undersized and holds even
+  when the stated size is honest.
 - **`_strictify` merges `$ref` siblings rather than replacing.** Pydantic puts a
   field's own description beside its `$ref`; replacing drops it and leaves only
   the referenced class's docstring. This silently ate the "MUST be NONE" rule

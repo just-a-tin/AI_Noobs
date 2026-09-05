@@ -48,6 +48,19 @@
         </div>`;
     }
 
+    const refs = sa.sceneReferences || [];
+    const conflict = sa.referenceAgreement === "CONFLICT";
+
+    const refRows = refs
+      .map(
+        (r) => `
+        <div class="ref-row">
+          <span class="ref-name">${esc(r.objectName)}</span>
+          <span class="ref-implies">${(+r.impliedProductCm).toFixed(0)} cm</span>
+        </div>`
+      )
+      .join("");
+
     return `
       <h4>Real-world size</h4>
       <div class="size ${sa.mismatchDetected ? "mismatch" : "match"}">
@@ -59,14 +72,21 @@
           }</span>
         </div>
         <div class="size-why">${esc(sa.explanation)}</div>
-        ${
-          sa.scaleReference
-            ? `<div class="size-ref">Measured against ${esc(
-                sa.scaleReference
-              )} · ${esc(sa.scaleConfidence)} confidence</div>`
-            : ""
-        }
-      </div>`;
+      </div>
+
+      ${
+        refs.length
+          ? `<div class="refs ${conflict ? "conflict" : ""}">
+               <div class="ref-head">${
+                 conflict
+                   ? "⚠ Objects in frame contradict each other"
+                   : "What each object in frame implies"
+               }</div>
+               ${refRows}
+               <div class="size-ref">${esc(sa.scaleConfidence)} confidence</div>
+             </div>`
+          : ""
+      }`;
   }
 
   function render(entry) {

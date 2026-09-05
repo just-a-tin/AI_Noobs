@@ -83,6 +83,43 @@ class ScaleConfidence(str, Enum):
     HIGH = "HIGH"
 
 
+# No docstring, for the same reason as ScaleConfidence below: a class docstring
+# becomes the schema description for every field of this type.
+class ReferenceAgreement(str, Enum):
+    NONE = "NONE"
+    SINGLE = "SINGLE"
+    AGREE = "AGREE"
+    CONFLICT = "CONFLICT"
+
+
+class SceneReference(BaseModel):
+    """One object in the frame used to work out how big the product really is.
+
+    Reading several at once does two jobs: it cross-checks the estimate, and
+    disagreement between them is itself evidence the image is a composite.
+    """
+
+    objectName: str = Field(
+        description=(
+            "The recognisable object in the image being used for scale "
+            "(e.g. 'adult person', 'two-seat sofa', 'standard doorway', "
+            "'AA battery', 'human hand')."
+        )
+    )
+    assumedRealCm: float = Field(
+        description=(
+            "The typical real-world size in cm of that reference object "
+            "itself — not the product. E.g. an adult person is ~170 cm."
+        )
+    )
+    impliedProductCm: float = Field(
+        description=(
+            "How big the product would have to be, in cm, if this reference "
+            "is correct. Derived from their relative sizes in the image."
+        )
+    )
+
+
 class ScaleAnalysis(BaseModel):
     """Does the product's apparent size match reality and the listing?
 
@@ -107,10 +144,23 @@ class ScaleAnalysis(BaseModel):
             "size cannot be recovered from a photo without a reference."
         )
     )
-    scaleReference: str | None = Field(
+    sceneReferences: list[SceneReference] = Field(
         description=(
-            "The in-frame object used to judge size (e.g. 'adult hand', "
-            "'AA battery', 'standard doorway'). Null if none was available."
+            "Every object in the images usable for scale, with what each one "
+            "implies about the product's size. List all you can find, not just "
+            "the best — several are more reliable than one, and disagreement "
+            "between them is itself meaningful. Empty when nothing in frame "
+            "has a knowable real size."
+        )
+    )
+    referenceAgreement: ReferenceAgreement = Field(
+        description=(
+            "NONE when sceneReferences is empty. SINGLE when there is only "
+            "one. AGREE when several references imply a consistent product "
+            "size. CONFLICT when they imply sizes that cannot all be true of "
+            "one real photograph — strong evidence the image is a composite "
+            "or generated, independent of whether the listing's size claim is "
+            "honest."
         )
     )
     expectedLongestCm: float | None = Field(
@@ -121,8 +171,9 @@ class ScaleAnalysis(BaseModel):
     )
     apparentLongestCm: float | None = Field(
         description=(
-            "Longest dimension in cm the product appears to be in the images, "
-            "judged against scaleReference. Null when scaleConfidence is NONE."
+            "Best single estimate, in cm, of the product's longest dimension, "
+            "consolidated across sceneReferences. Null when scaleConfidence "
+            "is NONE."
         )
     )
     mismatchDetected: bool = Field(
@@ -134,8 +185,9 @@ class ScaleAnalysis(BaseModel):
     explanation: str = Field(
         description=(
             "Two or three sentences on how you judged the size, naming the "
-            "reference object. If scale could not be determined, say that "
-            "plainly instead of guessing."
+            "objects you measured against. If the references disagree, say "
+            "what that implies about the image. If scale could not be "
+            "determined at all, say that plainly instead of guessing."
         )
     )
 
