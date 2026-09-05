@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Sentinel — offline fixture page</title>
+    <style>
+      body {
+        font: 14px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif;
+        margin: 0; background: #f5f5f5; color: #222;
+      }
+      .banner {
+        background: #0f172a; color: #fff; padding: 10px 16px; font-size: 12px;
+      }
+      .banner b { color: #38bdf8; }
+      .page { max-width: 900px; margin: 16px auto; background: #fff; padding: 20px; }
+      /* Deliberately obfuscated, Shopee-style class names: the extractor must
+         not depend on any of them. */
+      ._1x2y3z { font-size: 20px; font-weight: 500; margin: 0 0 12px; }
+      ._9a8b7c { font-size: 30px; color: #ee4d2d; font-weight: 500; }
+      ._4d5e6f { font-size: 15px; color: #929292; text-decoration: line-through; margin-left: 10px; }
+      table { border-collapse: collapse; margin-top: 20px; width: 100%; }
+      td { padding: 7px 10px; border-bottom: 1px solid #eee; }
+      td:first-child { color: #757575; width: 180px; }
+      .gallery img, .reviews img {
+        width: 88px; height: 88px; object-fit: cover;
+        background: #ddd; margin-right: 6px; border: 1px solid #ddd;
+      }
+      h3 { font-size: 13px; text-transform: uppercase; color: #757575; margin: 22px 0 8px; }
+      #report {
+        max-width: 900px; margin: 16px auto; background: #fff; padding: 20px;
+        font-family: ui-monospace, Consolas, monospace; font-size: 12px;
+      }
+      #report h2 { font-size: 13px; margin: 0 0 10px; font-family: inherit; }
+      .ok { color: #15803d; } .bad { color: #b91c1c; }
+      .row { display: flex; gap: 10px; padding: 2px 0; }
+      .row span:first-child { width: 170px; color: #666; }
+    </style>
+  </head>
+  <body>
+    <div class="banner">
+      <b>Sentinel fixture page</b> — offline stand-in for a Shopee PDP. Exercises the
+      DOM-fallback extractor and the badge UI with no network and no backend.
+    </div>
+
+    <div class="page">
+      <h1 class="_1x2y3z">
+        Wireless Earbuds Pro ANC Bluetooth 5.3 Noise Cancelling 512GB Storage
+      </h1>
+
+      <div>
+        <span class="_9a8b7c">S$59.90</span>
+        <span class="_4d5e6f">S$329.00</span>
+      </div>
+
+      <h3>Product images</h3>
+      <div class="gallery">
+        <img src="https://down-sg.img.susercontent.com/file/sg-11134201-7rbk8-lm4xq2p9v8n3a1" alt="" />
+        <img src="https://down-sg.img.susercontent.com/file/sg-11134201-7rbk8-lm4xq2p9v8n3a2" alt="" />
+        <img src="https://down-sg.img.susercontent.com/file/sg-11134201-7rbk8-lm4xq2p9v8n3a3" alt="" />
+        <img src="https://down-sg.img.susercontent.com/file/sg-11134201-7rbk8-lm4xq2p9v8n3a4" alt="" />
+      </div>
+
+      <h3>Product specifications</h3>
+      <table>
+        <tr><td>Brand</td><td>SoundMax</td></tr>
+        <tr><td>Material</td><td>ABS plastic</td></tr>
+        <tr><td>Battery Life</td><td>40 hours</td></tr>
+        <tr><td>Storage Capacity</td><td>512GB</td></tr>
+        <tr><td>Warranty Type</td><td>No Warranty</td></tr>
+      </table>
+
+      <h3>Customer review photos</h3>
+      <div class="reviews">
+        <img src="https://down-sg.img.susercontent.com/file/sg-11134103-7rbld-review0001aaa" alt="" />
+        <img src="https://down-sg.img.susercontent.com/file/sg-11134103-7rbld-review0002bbb" alt="" />
+        <img src="https://down-sg.img.susercontent.com/file/sg-11134103-7rbld-review0003ccc" alt="" />
+      </div>
+    </div>
+
+    <div id="report"><h2>Extraction report</h2><div id="rows">running…</div></div>
+
+    <script src="../src/shared/config.js"></script>
+    <script src="../src/shared/presentation.js"></script>
+    <script src="../src/shared/extract.js"></script>
+    <script src="../src/shared/mock-verdicts.js"></script>
+    <script src="./harness.js"></script>
+  </body>
+</html>

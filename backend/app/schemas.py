@@ -1,0 +1,194 @@
+"""Request/response models, and the JSON schema Bedrock is constrained to.
+
+The Bedrock output schema is *derived* from `AnalysisCore` rather than written
+out by hand, so the model's contract and our parsing can never drift apart.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from enum import Enum
+from typing import Any
+
+from pydantic import BaseModel, Field, HttpUrl
+
+
+class Platform(str, Enum):
+    SHOPEE = "shopee"
+    LAZADA = "lazada"
+    AMAZON_SG = "amazon_sg"
+
+
+class RiskLevel(str, Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+
+
+class AnalyzeRequest(BaseModel):
+    platform: Platform = Platform.SHOPEE
+    itemId: str
+    # Not in the original spec, but Shopee's PDP API is keyed on (shop, item)
+    # and the URL carries both: `-i.{shopId}.{itemId}`.
+    shopId: str | None = None
+    title: str
+    price: float
+    originalPrice: float | None = None
+    sellerRating: float | None = None
+    shopLocation: str | None = None
+    specs: dict[str, str] = Field(default_factory=dict)
+    imageUrls: list[HttpUrl] = Field(default_factory=list)
+    reviewImageUrls: list[HttpUrl] = Field(default_factory=list)
+
+    def cache_key(self) -> str:
+        return f"{self.platform.value}#{self.itemId}"
+
+    def specs_hash(self) -> str:
+        """Stable digest of the listing fields a seller could quietly edit."""
+        payload = json.dumps(
+            {"title": self.title, "specs": dict(sorted(self.specs.items()))},
+            sort_keys=True,
+            ensure_ascii=False,
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+class ImageAnalysis(BaseModel):
+    isAiGenerated: bool = Field(
+        description="True if the seller's gallery images show signs of being AI-generated."
+    )
+    visualDiscrepancyDetected: bool = Field(
+        description=(
+            "True if the product in the gallery images differs from the product "
+            "in customer review photos."
+        )
+    )
+    explanation: str = Field(
+        description="Two or three sentences on the visual evidence, citing what you saw."
+    )
+
+
+class SubScores(BaseModel):
+    """Per-dimension scores backing the popup's diagnostic breakdown.
+
+    Absent from the original spec, but the UI promises a three-part breakdown;
+    without these the frontend would have to invent the numbers.
+
+    Field descriptions below are sent to the model as part of the output
+    schema, so they are written as instructions to it, not notes to ourselves.
+    """
+
+    visualIntegrity: int = Field(
+        ge=0,
+        le=100,
+        description=(
+            "0-100. Are gallery images genuine photographs of the product sold? "
+            "Lower for AI-generation artefacts, reused stock imagery, foreign "
+            "watermarks, or a systematic mismatch against review photos."
+        ),
+    )
+    specConsistency: int = Field(
+        ge=0,
+        le=100,
+        description=(
+            "0-100. Do title, specification table and images describe one "
+            "coherent, physically plausible product?"
+        ),
+    )
+    priceSanity: int = Field(
+        ge=0,
+        le=100,
+        description=(
+            "0-100. Is the price explicable for this category? A steep discount "
+            "alone is not fraud; weigh it with the other evidence."
+        ),
+    )
+
+
+class AnalysisCore(BaseModel):
+    """Exactly what the model produces. `riskLevel` is deliberately absent —
+    the backend derives it from the score so the badge colour and the number
+    can never disagree."""
+
+    overallTrustScore: int = Field(
+        ge=0,
+        le=100,
+        description=(
+            "0-100 holistic trust judgement, where 100 is entirely trustworthy. "
+            "Should broadly reflect the sub-scores weighted by which evidence is "
+            "strongest, rather than a strict average."
+        ),
+    )
+    subScores: SubScores
+    findings: list[str] = Field(
+        description=(
+            "Specific, concrete observations a shopper could verify themselves. "
+            "Not generic safety advice. If evidence is thin, say so here."
+        )
+    )
+    imageAnalysis: ImageAnalysis
+    specDiscrepancies: list[str] = Field(
+        description=(
+            "Direct contradictions between title, specification table and "
+            "images. Empty if there are none."
+        )
+    )
+
+
+class AnalysisResult(AnalysisCore):
+    riskLevel: RiskLevel
+    cached: bool = False
+    modelId: str | None = None
+    analyzedAt: int | None = None  # epoch seconds
+
+
+def _strictify(node: Any) -> Any:
+    """Make a JSON schema acceptable to structured outputs.
+
+    Requires `additionalProperties: false` and every property listed in
+    `required` on each object node.
+
+    Also strips the noise Pydantic generates: auto-titles like
+    "Overalltrustscore", and object-level descriptions lifted from class
+    docstrings. Everything in this schema is sent to the model as instruction,
+    and our internal rationale about frontend design is not something it should
+    be reading. Field-level descriptions are deliberately kept — those are
+    written for the model.
+    """
+    if isinstance(node, dict):
+        node = {
+            k: _strictify(v) for k, v in node.items() if k != "title"
+        }
+        if node.get("type") == "object" and "properties" in node:
+            node.pop("description", None)  # class docstring, not model guidance
+            node["additionalProperties"] = False
+            node["required"] = list(node["properties"].keys())
+        return node
+    if isinstance(node, list):
+        return [_strictify(item) for item in node]
+    return node
+
+
+def build_analysis_schema() -> dict[str, Any]:
+    """The json_schema handed to `output_config.format`."""
+    schema = AnalysisCore.model_json_schema()
+
+    # Structured outputs want a self-contained schema; inline the $defs that
+    # Pydantic factors out for nested models.
+    defs = schema.pop("$defs", {})
+
+    def inline(node: Any) -> Any:
+        if isinstance(node, dict):
+            ref = node.get("$ref")
+            if ref and ref.startswith("#/$defs/"):
+                return inline(defs[ref.split("/")[-1]])
+            return {k: inline(v) for k, v in node.items()}
+        if isinstance(node, list):
+            return [inline(item) for item in node]
+        return node
+
+    return _strictify(inline(schema))
+
+
+ANALYSIS_SCHEMA = build_analysis_schema()

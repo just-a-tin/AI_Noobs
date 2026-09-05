@@ -1,0 +1,31 @@
+# Environment
+.env
+.env.local
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node (dormant until Node is installed)
+node_modules/
+dist/
+build/
+.parcel-cache/
+.plasmo/
+
+# AWS CDK
+cdk.out/
+cdk.context.json
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
