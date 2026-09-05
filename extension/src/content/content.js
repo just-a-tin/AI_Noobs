@@ -13,6 +13,7 @@
   const HOST_ID = "sentinel-badge-host";
   let currentHref = null;
   let currentToken = 0;
+  let navTimer = null;
 
   // --- Badge UI -------------------------------------------------------------
 
@@ -256,6 +257,31 @@
 
   // --- Flow -----------------------------------------------------------------
 
+  /**
+   * Is this script still attached to a live extension?
+   *
+   * Reloading the extension orphans the content scripts already injected into
+   * open tabs: `chrome.runtime` survives as an object but its id is gone, and
+   * every call throws "Extension context invalidated". Without this check the
+   * navigation timer below keeps firing forever in every open Shopee tab,
+   * throwing once a second — noisy exactly during development, when the
+   * extension is reloaded most.
+   */
+  function contextAlive() {
+    try {
+      return Boolean(chrome.runtime?.id);
+    } catch {
+      return false;
+    }
+  }
+
+  /** Stop cleanly once orphaned; a page refresh loads the new version. */
+  function shutdown() {
+    clearInterval(navTimer);
+    window.removeEventListener("popstate", onNavigation);
+    removeBadge();
+  }
+
   async function run() {
     const token = ++currentToken;
     const ids = extract.parseProductUrl();
@@ -277,21 +303,35 @@
       return;
     }
 
-    chrome.runtime.sendMessage({ type: "SENTINEL_ANALYZE", listing }, (reply) => {
-      if (token !== currentToken) return;
-      if (chrome.runtime.lastError || !reply) {
-        renderError(shadow, "Sentinel background service is unavailable");
-        return;
-      }
-      if (!reply.ok) {
-        renderError(shadow, reply.error || "Analysis unavailable");
-        return;
-      }
-      renderResult(shadow, reply.result);
-    });
+    if (!contextAlive()) {
+      renderError(shadow, "Sentinel was updated — refresh this page");
+      shutdown();
+      return;
+    }
+
+    try {
+      chrome.runtime.sendMessage({ type: "SENTINEL_ANALYZE", listing }, (reply) => {
+        if (token !== currentToken) return;
+        if (chrome.runtime.lastError || !reply) {
+          renderError(shadow, "Sentinel background service is unavailable");
+          return;
+        }
+        if (!reply.ok) {
+          renderError(shadow, reply.error || "Analysis unavailable");
+          return;
+        }
+        renderResult(shadow, reply.result);
+      });
+    } catch (err) {
+      // The extension was reloaded between the check above and this call.
+      console.warn("[Sentinel] messaging failed:", String(err));
+      renderError(shadow, "Sentinel was updated — refresh this page");
+      shutdown();
+    }
   }
 
   function onNavigation() {
+    if (!contextAlive()) return shutdown();
     if (location.href === currentHref) return;
     currentHref = location.href;
     run();
@@ -307,7 +347,8 @@
     };
   }
   window.addEventListener("popstate", onNavigation);
-  setInterval(onNavigation, 1000); // belt-and-braces for framework routers
+  // Belt-and-braces for framework routers that bypass the history API.
+  navTimer = setInterval(onNavigation, 1000);
 
   onNavigation();
 })();
