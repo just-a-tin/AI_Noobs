@@ -22,43 +22,10 @@
     pdpApiTemplate:
       "https://shopee.sg/api/v4/pdp/get_pc?item_id={itemId}&shop_id={shopId}",
 
-    /**
-     * Written reviews, with their images correctly attributed.
-     *
-     * Paginated: Shopee returns a page at a time, and the reviews that
-     * actually say something are often not on the first page — the default
-     * ordering puts plenty of empty five-star ratings up front.
-     */
+    /** Written reviews, with their images correctly attributed. */
     ratingsApiTemplate:
       "https://shopee.sg/api/v4/item/get_ratings?filter=0&flag=1" +
-      "&itemid={itemId}&shopid={shopId}&type=0&limit={limit}&offset={offset}",
-
-    /** Shopee rejects oversized pages; 20 is comfortably within its cap. */
-    ratingsPageSize: 20,
-
-    /**
-     * Pages of reviews to request. ONE by default, deliberately.
-     *
-     * Requesting six pages in a burst tripped Shopee's traffic verification
-     * and got a real session redirected to /verify/traffic/error. A person
-     * reading reviews pages through them slowly; six requests in under a
-     * second does not look like a person. Twenty reviews is enough to spot a
-     * complaint pattern, and the cost of being wrong here is the user's Shopee
-     * account, not ours.
-     */
-    maxRatingPages: 1,
-
-    /** Minimum gap between any two Shopee API calls, in milliseconds. */
-    minRequestIntervalMs: 1200,
-
-    /**
-     * Analyse automatically on page load, or wait to be asked.
-     *
-     * Automatic analysis means every product page a user opens costs API
-     * requests. Manual keeps Sentinel at one request burst per deliberate
-     * click, which is far more defensible traffic.
-     */
-    autoAnalyse: false,
+      "&itemid={itemId}&shopid={shopId}&type=0&limit={limit}&offset=0",
 
     /**
      * Review text filtering.
@@ -71,6 +38,7 @@
     minReviewWords: 5,
     minReviewChars: 20,
     maxReviews: 15,
+    ratingsToFetch: 50,
 
     /** Shopee stores image hashes; the CDN URL is built from them. */
     imageCdnBase: "https://down-sg.img.susercontent.com/file/",

@@ -29,137 +29,6 @@
     return raw / config.priceScale;
   }
 
-  // --- Page-context fetch ---------------------------------------------------
-
-  const REQUEST_EVENT = "sentinel:api-request";
-  const RESPONSE_EVENT = "sentinel:api-response";
-  let requestSeq = 0;
-
-  /**
-   * Is the page-context bridge loaded?
-   *
-   * Read from the DOM rather than an event: the bridge runs at document_start
-   * and this script at document_idle, so any announcement would have fired
-   * before anything was listening.
-   */
-  function bridgeAvailable() {
-    return document.documentElement.hasAttribute("data-sentinel-bridge");
-  }
-
-  /**
-   * Fetch a Shopee API URL from the page's own JavaScript context.
-   *
-   * A fetch issued from a content script is attributed to the extension, and
-   * Shopee's v4 API answers that with a bare HTTP 403. Routed through the
-   * MAIN-world bridge it is an ordinary same-origin request and succeeds.
-   *
-   * Uses CustomEvents rather than postMessage so a 100KB page of review JSON
-   * is not broadcast into Shopee's own message handlers.
-   */
-  function pageFetchJson(url, timeoutMs = 12000) {
-    return new Promise((resolve, reject) => {
-      const id = `${Date.now()}-${++requestSeq}`;
-      let settled = false;
-
-      const onResponse = (event) => {
-        let msg;
-        try {
-          msg = JSON.parse(event.detail);
-        } catch {
-          return;
-        }
-        if (!msg || msg.id !== id) return;
-
-        settled = true;
-        document.removeEventListener(RESPONSE_EVENT, onResponse);
-        clearTimeout(timer);
-
-        if (msg.error) return reject(new Error(msg.error));
-        if (!msg.ok) return reject(new Error(`HTTP ${msg.status}`));
-        try {
-          resolve(JSON.parse(msg.body));
-        } catch {
-          reject(new Error("response was not JSON"));
-        }
-      };
-
-      const timer = setTimeout(() => {
-        if (settled) return;
-        document.removeEventListener(RESPONSE_EVENT, onResponse);
-        reject(new Error("page bridge did not respond"));
-      }, timeoutMs);
-
-      document.addEventListener(RESPONSE_EVENT, onResponse);
-      document.dispatchEvent(
-        new CustomEvent(REQUEST_EVENT, { detail: JSON.stringify({ id, url }) })
-      );
-    });
-  }
-
-  async function directFetchJson(url) {
-    const response = await fetch(url, {
-      credentials: "include",
-      headers: { "x-api-source": "pc", "x-requested-with": "XMLHttpRequest" },
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return response.json();
-  }
-
-  /**
-   * Has Shopee flagged this session as automated traffic?
-   *
-   * Shopee redirects to /verify/traffic/error when it decides a session looks
-   * like a script. Continuing to send requests while flagged prolongs the
-   * block, so Sentinel stops entirely rather than making the user's situation
-   * worse for the sake of a score.
-   */
-  function trafficVerificationTripped() {
-    return /\/verify\/traffic|\/verify\/captcha/.test(location.pathname);
-  }
-
-  // Serialise and space out every Shopee API call.
-  //
-  // Firing several requests at once tripped Shopee's traffic verification and
-  // got a live session redirected to /verify/traffic/error. Requests now queue
-  // behind one another with a minimum gap, so our traffic looks like a person
-  // reading a page rather than a script draining it.
-  let requestChain = Promise.resolve();
-  let lastRequestAt = 0;
-
-  function throttled(fn) {
-    const run = async () => {
-      const wait = config.minRequestIntervalMs - (Date.now() - lastRequestAt);
-      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-      lastRequestAt = Date.now();
-      return fn();
-    };
-    // Chain regardless of whether the previous call succeeded.
-    const result = requestChain.then(run, run);
-    requestChain = result.then(
-      () => undefined,
-      () => undefined
-    );
-    return result;
-  }
-
-  /** Bridge when it is there, direct fetch when it is not. */
-  function apiFetchJson(url) {
-    if (trafficVerificationTripped()) {
-      return Promise.reject(
-        new Error("Shopee traffic verification is active — not sending requests")
-      );
-    }
-    if (!bridgeAvailable()) {
-      console.warn(
-        "[Sentinel] page bridge not loaded — falling back to a direct fetch," +
-          " which Shopee's API usually answers with 403. Reload the extension" +
-          " at chrome://extensions, then refresh this page."
-      );
-      return throttled(() => directFetchJson(url));
-    }
-    return throttled(() => pageFetchJson(url));
-  }
-
   // --- Layer 1: PDP JSON API -----------------------------------------------
 
   async function fromPdpApi({ itemId, shopId }) {
@@ -167,9 +36,13 @@
       .replace("{itemId}", itemId)
       .replace("{shopId}", shopId);
 
-    const body = await apiFetchJson(url).catch((err) => {
-      throw new Error(`PDP API ${err.message}`);
+    const response = await fetch(url, {
+      credentials: "include",
+      headers: { "x-api-source": "pc", "x-requested-with": "XMLHttpRequest" },
     });
+    if (!response.ok) throw new Error(`PDP API ${response.status}`);
+
+    const body = await response.json();
     const item = body?.data?.item ?? body?.item;
     if (!item) throw new Error("PDP API returned no item");
 
@@ -216,14 +89,9 @@
    */
   function findReviewAnchor() {
     const reviewHeadingRe = /\b(review|rating|ulasan|penilaian)\b/i;
-    // "div[class]" matches a great many elements on a Shopee page, and this
-    // runs on every extraction attempt. Capped so a heavy page cannot turn
-    // it into a stall.
-    let examined = 0;
     for (const el of document.querySelectorAll(
       "h1,h2,h3,h4,section,div[class],[role='heading']"
     )) {
-      if (++examined > 6000) break;
       const own = (el.childElementCount ? "" : el.textContent || "").trim();
       if (own && own.length < 60 && reviewHeadingRe.test(own)) return el;
     }
@@ -310,72 +178,37 @@
     return { reviews: kept, reviewStats: stats };
   }
 
-  /** One page of ratings, with a specific error when Shopee refuses. */
-  async function fetchRatingsPage({ itemId, shopId }, offset, limit) {
+  /**
+   * Shopee's ratings endpoint: review text, stars, and buyer photos.
+   *
+   * Also the correct source for review images — DOM scraping cannot reliably
+   * tell a buyer's photo from a page banner, but this endpoint attributes them
+   * per review.
+   */
+  async function fromRatingsApi({ itemId, shopId }) {
     const url = config.ratingsApiTemplate
       .replace("{itemId}", itemId)
       .replace("{shopId}", shopId)
-      .replace("{limit}", String(limit))
-      .replace("{offset}", String(offset));
+      .replace("{limit}", String(config.ratingsToFetch));
 
-    const body = await apiFetchJson(url).catch((err) => {
-      throw new Error(`ratings API ${err.message} (offset ${offset})`);
+    const response = await fetch(url, {
+      credentials: "include",
+      headers: { "x-api-source": "pc", "x-requested-with": "XMLHttpRequest" },
     });
+    if (!response.ok) throw new Error(`ratings API ${response.status}`);
 
-    // Shopee answers 200 with an error code in the body, so a raw status
-    // check is not enough to know the call worked.
-    if (body?.error) {
-      throw new Error(
-        `ratings API error ${body.error}${body.error_msg ? `: ${body.error_msg}` : ""}`
-      );
-    }
-
+    const body = await response.json();
     const ratings = body?.data?.ratings;
-    if (!Array.isArray(ratings)) {
-      throw new Error(
-        `ratings API returned no list (data keys: ${
-          body?.data ? Object.keys(body.data).join(",") : "none"
-        })`
-      );
-    }
-    return ratings;
-  }
+    if (!Array.isArray(ratings)) throw new Error("ratings API returned no list");
 
-  /**
-   * Every page of reviews, up to a cap.
-   *
-   * Paging matters: Shopee's default ordering puts plenty of empty five-star
-   * ratings first, so the reviews that actually say something are frequently
-   * not on page one. Stops as soon as a page comes back short.
-   */
-  async function fromRatingsApi(ids) {
-    const size = config.ratingsPageSize;
-    const all = [];
-    let pagesFetched = 0;
-
-    for (let page = 0; page < config.maxRatingPages; page++) {
-      let batch;
-      try {
-        batch = await fetchRatingsPage(ids, page * size, size);
-      } catch (err) {
-        // A later page failing should not discard the pages that worked.
-        if (page === 0) throw err;
-        console.warn(`[Sentinel] ratings page ${page} failed:`, String(err));
-        break;
-      }
-      pagesFetched += 1;
-      all.push(...batch);
-      if (batch.length < size) break;
-    }
-
-    const records = all.map((r) => ({
+    const records = ratings.map((r) => ({
       text: r?.comment,
       rating: r?.rating_star,
       hasImages: Array.isArray(r?.images) && r.images.length > 0,
     }));
 
     const images = [];
-    for (const r of all) {
+    for (const r of ratings) {
       for (const hash of r?.images ?? []) {
         if (images.length >= config.maxReviewImages) break;
         const u = imageUrl(hash);
@@ -383,52 +216,21 @@
       }
     }
 
-    const withText = records.filter((r) => (r.text || "").trim().length > 0).length;
-    console.info(
-      `[Sentinel] ratings API: ${all.length} reviews over ${pagesFetched} page(s),`,
-      `${withText} with any comment text,`,
-      `${images.length} buyer photo(s)`
-    );
-
     return { ...summariseReviews(records), reviewImageUrls: images };
   }
 
-  /**
-   * Last resort: pull review paragraphs out of the DOM.
-   *
-   * Deliberately bounded. Scanning every div/p/span/li in the document and
-   * reading each one's textContent is enough work to lock up a Shopee product
-   * page, which carries a very large DOM plus an infinite-scroll
-   * recommendation feed. So the scan is confined to the review section and
-   * capped, and it gives up rather than degrading the page.
-   */
+  /** Last resort: pull review paragraphs out of the DOM. */
   function reviewsFromDom() {
     const anchorEl = findReviewAnchor();
     if (!anchorEl) return { reviews: [], reviewStats: null };
 
-    // Confine the scan to the review section rather than the whole document.
-    const root =
-      anchorEl.closest("section") ||
-      anchorEl.parentElement?.parentElement ||
-      anchorEl.parentElement ||
-      document.body;
-
-    const MAX_ELEMENTS = 2500;
     const records = [];
     const seen = new Set();
-    let examined = 0;
-
-    for (const el of root.querySelectorAll("div, p, span, li")) {
-      if (++examined > MAX_ELEMENTS) {
-        console.warn(
-          `[Sentinel] review scan hit the ${MAX_ELEMENTS} element cap; ` +
-            "reporting what was found so far"
-        );
-        break;
-      }
-      // Leaf elements only, checked BEFORE touching textContent: a container's
-      // textContent concatenates its entire subtree, which is what makes a
-      // naive scan quadratic.
+    for (const el of document.querySelectorAll("div, p, span, li")) {
+      const after =
+        anchorEl.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING;
+      if (!after) continue;
+      // Innermost text only: a container would swallow the whole section.
       if (el.childElementCount > 0) continue;
 
       const text = (el.textContent || "").trim();
@@ -437,7 +239,6 @@
       seen.add(text);
       records.push({ text, rating: null, hasImages: false });
     }
-
     return summariseReviews(records);
   }
 
@@ -682,6 +483,21 @@
       console.warn("[Sentinel] PDP API unavailable, falling back to DOM:", apiError);
     }
 
+    // Written reviews are the one place a buyer says what actually arrived.
+    // The ratings endpoint also attributes buyer photos per review, which DOM
+    // scraping cannot do reliably.
+    let reviewData = { reviews: [], reviewStats: null, reviewImageUrls: [] };
+    try {
+      reviewData = await fromRatingsApi(ids);
+    } catch (err) {
+      console.warn("[Sentinel] ratings API unavailable, scraping DOM:", String(err));
+      try {
+        reviewData = { ...reviewsFromDom(), reviewImageUrls: [] };
+      } catch (domErr) {
+        console.warn("[Sentinel] DOM review scrape failed:", String(domErr));
+      }
+    }
+
     // The API can succeed but omit fields; fill gaps from the DOM rather than
     // sending a half-empty payload the model cannot reason about.
     const domData = fromDom(ids);
@@ -699,6 +515,10 @@
       }
     }
 
+    // Ratings-API photos are correctly attributed, so they win outright.
+    if (reviewData.reviewImageUrls?.length) {
+      listing.reviewImageUrls = reviewData.reviewImageUrls;
+    }
 
     // --- NEW RETRY LOGIC: Wait for Shopee to load the JSON-LD ---
     if (!listing.title || listing.price == null) {
@@ -722,27 +542,6 @@
         url: location.href,
       });
       return null;
-    }
-
-    // Reviews are fetched once, after the retry gate. Doing it inside the
-    // retry loop meant up to five ratings-API paginations and five
-    // full-document DOM scans per extraction, which is enough to lock up a
-    // Shopee page.
-    let reviewData = { reviews: [], reviewStats: null, reviewImageUrls: [] };
-    try {
-      reviewData = await fromRatingsApi(ids);
-    } catch (err) {
-      console.warn("[Sentinel] ratings API unavailable, scraping DOM:", String(err));
-      try {
-        reviewData = { ...reviewsFromDom(), reviewImageUrls: [] };
-      } catch (domErr) {
-        console.warn("[Sentinel] DOM review scrape failed:", String(domErr));
-      }
-    }
-
-    // Ratings-API photos are correctly attributed, so they win outright.
-    if (reviewData.reviewImageUrls?.length) {
-      listing.reviewImageUrls = reviewData.reviewImageUrls;
     }
 
     const payload = {

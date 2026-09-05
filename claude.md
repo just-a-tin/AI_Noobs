@@ -16,11 +16,10 @@ does and how to run it. This file covers things that are easy to get wrong.
 ## Commands
 
 ```bash
-cd backend && .venv/Scripts/python -m pytest -q      # 113 tests
+cd backend && .venv/Scripts/python -m pytest -q      # 78 tests
 python scripts/e2e_demo.py                           # offline end-to-end
 python scripts/run_local.py                          # API on :8000
 python scripts/check_aws.py                          # preflight for real Bedrock
-python scripts/check_js.py                           # extension JS structure
 python scripts/make_icons.py                         # regenerate icons
 ```
 
@@ -91,42 +90,6 @@ after a CDK deploy. Tests set `SENTINEL_SKIP_DOTENV=1` so a developer's local
   strips them and re-applies the length filter to the remaining body; a known
   label with a long answer is kept, since that is prose the buyer wrote.
   Tested in `test_review_text.py`.
-- **Shopee's v4 API must be called from the PAGE's context, not the content
-  script.** An MV3 content-script fetch is attributed to the extension, and
-  Shopee answers that with a bare HTTP 403 — which silently cost us every
-  review on every listing. `src/page/api-bridge.js` runs with `world: "MAIN"`
-  and proxies the request over `postMessage`; it refuses anything not on
-  Shopee's own origin. It signals readiness with a `data-sentinel-bridge`
-  attribute rather than a message, because it runs at `document_start` and the
-  content script at `document_idle` — a message would arrive before anything
-  was listening.
-- **Shopee has traffic verification, and we tripped it.** Requesting six pages
-  of reviews in a burst got a live session redirected to
-  `/verify/traffic/error`. Every Shopee API call is now serialised behind a
-  `minRequestIntervalMs` gap, `maxRatingPages` defaults to 1, and both the
-  content script and `apiFetchJson` stand down entirely when the path matches
-  `/verify/(traffic|captcha)` — continuing to request while flagged prolongs
-  the block for the user. `config.autoAnalyse = false` switches to
-  click-to-analyse, which is the fallback if it happens again.
-  **Request volume is a correctness concern here, not an optimisation.**
-- **The bridge uses CustomEvents, never `window.postMessage`.** postMessage
-  broadcasts to every message listener on the page, so a 100KB page of review
-  JSON would be delivered into Shopee's own application code. That is a good
-  way to break the host page.
-- **DOM scans must be bounded and leaf-first.** A container's `textContent`
-  concatenates its whole subtree, so reading it for every element is quadratic
-  — enough to lock up a Shopee page. Check `childElementCount` before touching
-  text, scope the scan to a subtree, and cap the iteration count.
-- **Reviews are fetched once, past the retry gate.** Inside the retry loop it
-  meant up to five ratings paginations and five full-document scans per
-  extraction.
-- **Ratings are paginated.** Shopee's default ordering puts empty five-star
-  ratings first, so the reviews that say anything are often not on page one.
-  `fromRatingsApi` walks up to `maxRatingPages` pages and stops early on a
-  short page; a later page failing keeps the pages that worked.
-- **No Node means no linter.** `scripts/check_js.py` catches structural
-  damage in the extension's JS, which would otherwise show up as Chrome
-  silently refusing to load the extension.
 - **Few usable reviews is missing evidence, not fraud.** The prompt says so in
   capitals, and `reviewCredibility` should sit near 50 in that case.
 - **A failed analysis must surface as `UNAVAILABLE`, never a neutral score.** A
