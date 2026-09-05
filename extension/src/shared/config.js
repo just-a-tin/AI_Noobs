@@ -22,10 +22,21 @@
     pdpApiTemplate:
       "https://shopee.sg/api/v4/pdp/get_pc?item_id={itemId}&shop_id={shopId}",
 
-    /** Written reviews, with their images correctly attributed. */
+    /**
+     * Written reviews, with their images correctly attributed.
+     *
+     * Paginated: Shopee returns a page at a time, and the reviews that
+     * actually say something are often not on the first page — the default
+     * ordering puts plenty of empty five-star ratings up front.
+     */
     ratingsApiTemplate:
       "https://shopee.sg/api/v4/item/get_ratings?filter=0&flag=1" +
-      "&itemid={itemId}&shopid={shopId}&type=0&limit={limit}&offset=0",
+      "&itemid={itemId}&shopid={shopId}&type=0&limit={limit}&offset={offset}",
+
+    /** Shopee rejects oversized pages; 20 is comfortably within its cap. */
+    ratingsPageSize: 20,
+    /** Up to 120 reviews. Stops early once a page comes back short. */
+    maxRatingPages: 6,
 
     /**
      * Review text filtering.
@@ -38,7 +49,6 @@
     minReviewWords: 5,
     minReviewChars: 20,
     maxReviews: 15,
-    ratingsToFetch: 50,
 
     /** Shopee stores image hashes; the CDN URL is built from them. */
     imageCdnBase: "https://down-sg.img.susercontent.com/file/",

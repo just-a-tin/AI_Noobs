@@ -178,43 +178,91 @@
     return { reviews: kept, reviewStats: stats };
   }
 
-  /**
-   * Shopee's ratings endpoint: review text, stars, and buyer photos.
-   *
-   * Also the correct source for review images — DOM scraping cannot reliably
-   * tell a buyer's photo from a page banner, but this endpoint attributes them
-   * per review.
-   */
-  async function fromRatingsApi({ itemId, shopId }) {
+  /** One page of ratings, with a specific error when Shopee refuses. */
+  async function fetchRatingsPage({ itemId, shopId }, offset, limit) {
     const url = config.ratingsApiTemplate
       .replace("{itemId}", itemId)
       .replace("{shopId}", shopId)
-      .replace("{limit}", String(config.ratingsToFetch));
+      .replace("{limit}", String(limit))
+      .replace("{offset}", String(offset));
 
     const response = await fetch(url, {
       credentials: "include",
       headers: { "x-api-source": "pc", "x-requested-with": "XMLHttpRequest" },
     });
-    if (!response.ok) throw new Error(`ratings API ${response.status}`);
+    if (!response.ok) {
+      throw new Error(`ratings API HTTP ${response.status} (offset ${offset})`);
+    }
 
     const body = await response.json();
-    const ratings = body?.data?.ratings;
-    if (!Array.isArray(ratings)) throw new Error("ratings API returned no list");
 
-    const records = ratings.map((r) => ({
+    // Shopee answers 200 with an error code in the body, so a raw status
+    // check is not enough to know the call worked.
+    if (body?.error) {
+      throw new Error(
+        `ratings API error ${body.error}${body.error_msg ? `: ${body.error_msg}` : ""}`
+      );
+    }
+
+    const ratings = body?.data?.ratings;
+    if (!Array.isArray(ratings)) {
+      throw new Error(
+        `ratings API returned no list (data keys: ${
+          body?.data ? Object.keys(body.data).join(",") : "none"
+        })`
+      );
+    }
+    return ratings;
+  }
+
+  /**
+   * Every page of reviews, up to a cap.
+   *
+   * Paging matters: Shopee's default ordering puts plenty of empty five-star
+   * ratings first, so the reviews that actually say something are frequently
+   * not on page one. Stops as soon as a page comes back short.
+   */
+  async function fromRatingsApi(ids) {
+    const size = config.ratingsPageSize;
+    const all = [];
+    let pagesFetched = 0;
+
+    for (let page = 0; page < config.maxRatingPages; page++) {
+      let batch;
+      try {
+        batch = await fetchRatingsPage(ids, page * size, size);
+      } catch (err) {
+        // A later page failing should not discard the pages that worked.
+        if (page === 0) throw err;
+        console.warn(`[Sentinel] ratings page ${page} failed:`, String(err));
+        break;
+      }
+      pagesFetched += 1;
+      all.push(...batch);
+      if (batch.length < size) break;
+    }
+
+    const records = all.map((r) => ({
       text: r?.comment,
       rating: r?.rating_star,
       hasImages: Array.isArray(r?.images) && r.images.length > 0,
     }));
 
     const images = [];
-    for (const r of ratings) {
+    for (const r of all) {
       for (const hash of r?.images ?? []) {
         if (images.length >= config.maxReviewImages) break;
         const u = imageUrl(hash);
         if (u) images.push(u);
       }
     }
+
+    const withText = records.filter((r) => (r.text || "").trim().length > 0).length;
+    console.info(
+      `[Sentinel] ratings API: ${all.length} reviews over ${pagesFetched} page(s),`,
+      `${withText} with any comment text,`,
+      `${images.length} buyer photo(s)`
+    );
 
     return { ...summariseReviews(records), reviewImageUrls: images };
   }

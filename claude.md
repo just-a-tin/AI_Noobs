@@ -16,10 +16,11 @@ does and how to run it. This file covers things that are easy to get wrong.
 ## Commands
 
 ```bash
-cd backend && .venv/Scripts/python -m pytest -q      # 78 tests
+cd backend && .venv/Scripts/python -m pytest -q      # 113 tests
 python scripts/e2e_demo.py                           # offline end-to-end
 python scripts/run_local.py                          # API on :8000
 python scripts/check_aws.py                          # preflight for real Bedrock
+python scripts/check_js.py                           # extension JS structure
 python scripts/make_icons.py                         # regenerate icons
 ```
 
@@ -90,6 +91,13 @@ after a CDK deploy. Tests set `SENTINEL_SKIP_DOTENV=1` so a developer's local
   strips them and re-applies the length filter to the remaining body; a known
   label with a long answer is kept, since that is prose the buyer wrote.
   Tested in `test_review_text.py`.
+- **Ratings are paginated.** Shopee's default ordering puts empty five-star
+  ratings first, so the reviews that say anything are often not on page one.
+  `fromRatingsApi` walks up to `maxRatingPages` pages and stops early on a
+  short page; a later page failing keeps the pages that worked.
+- **No Node means no linter.** `scripts/check_js.py` catches structural
+  damage in the extension's JS, which would otherwise show up as Chrome
+  silently refusing to load the extension.
 - **Few usable reviews is missing evidence, not fraud.** The prompt says so in
   capitals, and `reviewCredibility` should sit near 50 in that case.
 - **A failed analysis must surface as `UNAVAILABLE`, never a neutral score.** A
