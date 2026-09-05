@@ -3,36 +3,45 @@
  * exists for one reason: to make Shopee's API calls look like Shopee's own.
  *
  * A fetch issued from a content script is attributed to the extension, not the
- * page. Shopee's v4 API rejects that with a bare HTTP 403 — which is what was
- * silently costing us every review on every listing. The same request made
- * from page context is an ordinary same-origin call and succeeds.
+ * page. Shopee's v4 API rejects that with a bare HTTP 403 — which was silently
+ * costing us every review on every listing. The same request made from page
+ * context is an ordinary same-origin call and succeeds.
  *
- * The isolated content script cannot call into here directly (separate JS
- * worlds share only the DOM), so requests and responses go over
- * window.postMessage. Only same-window messages carrying our marker are
- * honoured, and only URLs on Shopee's own origin are fetched — this must never
- * become a general-purpose proxy that the page can drive.
+ * Communication uses CustomEvents on `document`, NOT window.postMessage.
+ * postMessage broadcasts to every message listener on the page, so a large
+ * API response (a page of reviews is easily 100KB of JSON) would be delivered
+ * into Shopee's own application code as well as ours. CustomEvents on private
+ * event names reach only the listener we installed.
+ *
+ * Only URLs on Shopee's own origin are fetched — this must never become a
+ * general-purpose proxy the page can drive.
  */
 (function () {
-  const CHANNEL = "__sentinel_api__";
+  const REQUEST = "sentinel:api-request";
+  const RESPONSE = "sentinel:api-response";
 
-  window.addEventListener("message", async (event) => {
-    // Same-window only: reject anything posted by an iframe or another origin.
-    if (event.source !== window) return;
-
-    const msg = event.data;
-    if (!msg || msg.channel !== CHANNEL || msg.kind !== "request") return;
+  // detail is JSON text, not an object: structured data handed across the
+  // world boundary is subject to cloning rules that differ between browsers,
+  // and a string is unambiguous.
+  document.addEventListener(REQUEST, async (event) => {
+    let request;
+    try {
+      request = JSON.parse(event.detail);
+    } catch {
+      return;
+    }
+    if (!request || !request.id || !request.url) return;
 
     const reply = (payload) =>
-      window.postMessage(
-        { channel: CHANNEL, kind: "response", id: msg.id, ...payload },
-        window.location.origin
+      document.dispatchEvent(
+        new CustomEvent(RESPONSE, {
+          detail: JSON.stringify({ id: request.id, ...payload }),
+        })
       );
 
-    // Never fetch anything off Shopee's own origin.
     let target;
     try {
-      target = new URL(msg.url, window.location.origin);
+      target = new URL(request.url, window.location.origin);
     } catch {
       return reply({ ok: false, error: "invalid URL" });
     }
@@ -56,11 +65,9 @@
     }
   });
 
-  // Announce readiness through the DOM, not postMessage.
-  //
-  // This script runs at document_start and the content script at
-  // document_idle, so a "ready" message would be posted long before anything
-  // is listening for it. The two JavaScript worlds share the DOM, so a marker
-  // attribute is readable whenever the content script gets around to looking.
+  // Announce readiness through the DOM rather than an event: this script runs
+  // at document_start and the content script at document_idle, so any event
+  // would fire long before anything was listening. The DOM is the one thing
+  // the two JavaScript worlds share.
   document.documentElement.setAttribute("data-sentinel-bridge", "1");
 })();

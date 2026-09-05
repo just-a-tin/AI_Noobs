@@ -100,6 +100,17 @@ after a CDK deploy. Tests set `SENTINEL_SKIP_DOTENV=1` so a developer's local
   attribute rather than a message, because it runs at `document_start` and the
   content script at `document_idle` — a message would arrive before anything
   was listening.
+- **The bridge uses CustomEvents, never `window.postMessage`.** postMessage
+  broadcasts to every message listener on the page, so a 100KB page of review
+  JSON would be delivered into Shopee's own application code. That is a good
+  way to break the host page.
+- **DOM scans must be bounded and leaf-first.** A container's `textContent`
+  concatenates its whole subtree, so reading it for every element is quadratic
+  — enough to lock up a Shopee page. Check `childElementCount` before touching
+  text, scope the scan to a subtree, and cap the iteration count.
+- **Reviews are fetched once, past the retry gate.** Inside the retry loop it
+  meant up to five ratings paginations and five full-document scans per
+  extraction.
 - **Ratings are paginated.** Shopee's default ordering puts empty five-star
   ratings first, so the reviews that say anything are often not on page one.
   `fromRatingsApi` walks up to `maxRatingPages` pages and stops early on a
