@@ -168,6 +168,27 @@
     return stop;
   }
 
+  /**
+   * Idle prompt, shown when config.autoAnalyse is false.
+   *
+   * Analysing only on request means Sentinel costs Shopee one small burst per
+   * deliberate click rather than one per product page opened. That is far more
+   * defensible traffic, and the fallback if automatic analysis ever trips
+   * Shopee's verification again.
+   */
+  function renderPrompt(shadow, onClick) {
+    shadow.innerHTML = `
+      <style>${styles()}</style>
+      <div class="wrap"><div class="pill" id="ask">
+        <div class="dot" style="background:#0f172a">S</div>
+        <div class="headline">
+          <div class="score">Check this listing</div>
+          <div class="label">Click to run Sentinel's analysis</div>
+        </div>
+      </div></div>`;
+    shadow.getElementById("ask").addEventListener("click", onClick, { once: true });
+  }
+
   function renderError(shadow, message) {
     const p = presentation("UNAVAILABLE");
     shadow.innerHTML = `
@@ -348,8 +369,22 @@
     removeBadge();
   }
 
-  async function run() {
+  async function run(force = false) {
     const token = ++currentToken;
+
+    // Shopee shows /verify/traffic/error when it decides a session looks
+    // automated. Sentinel must go quiet: continuing to poll and request while
+    // flagged prolongs the block for the user.
+    if (/\/verify\/(traffic|captcha)/.test(location.pathname)) {
+      console.warn(
+        "[Sentinel] Shopee traffic verification is active. Sentinel has " +
+          "stopped making requests. Browse normally for a while and it will lift."
+      );
+      removeBadge();
+      shutdown();
+      return;
+    }
+
     const ids = extract.parseProductUrl();
     if (!ids) {
       removeBadge();
@@ -357,6 +392,12 @@
     }
 
     const shadow = createHost();
+
+    if (!config.autoAnalyse && !force) {
+      renderPrompt(shadow, () => run(true));
+      return;
+    }
+
     // The loading ticker repaints once a second, so it MUST be stopped before
     // anything else renders or it will overwrite the result a moment later.
     const stopLoading = renderLoading(shadow);

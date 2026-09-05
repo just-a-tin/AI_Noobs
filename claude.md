@@ -100,6 +100,15 @@ after a CDK deploy. Tests set `SENTINEL_SKIP_DOTENV=1` so a developer's local
   attribute rather than a message, because it runs at `document_start` and the
   content script at `document_idle` — a message would arrive before anything
   was listening.
+- **Shopee has traffic verification, and we tripped it.** Requesting six pages
+  of reviews in a burst got a live session redirected to
+  `/verify/traffic/error`. Every Shopee API call is now serialised behind a
+  `minRequestIntervalMs` gap, `maxRatingPages` defaults to 1, and both the
+  content script and `apiFetchJson` stand down entirely when the path matches
+  `/verify/(traffic|captcha)` — continuing to request while flagged prolongs
+  the block for the user. `config.autoAnalyse = false` switches to
+  click-to-analyse, which is the fallback if it happens again.
+  **Request volume is a correctness concern here, not an optimisation.**
 - **The bridge uses CustomEvents, never `window.postMessage`.** postMessage
   broadcasts to every message listener on the page, so a 100KB page of review
   JSON would be delivered into Shopee's own application code. That is a good

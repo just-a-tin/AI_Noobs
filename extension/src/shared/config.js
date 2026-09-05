@@ -35,8 +35,30 @@
 
     /** Shopee rejects oversized pages; 20 is comfortably within its cap. */
     ratingsPageSize: 20,
-    /** Up to 120 reviews. Stops early once a page comes back short. */
-    maxRatingPages: 6,
+
+    /**
+     * Pages of reviews to request. ONE by default, deliberately.
+     *
+     * Requesting six pages in a burst tripped Shopee's traffic verification
+     * and got a real session redirected to /verify/traffic/error. A person
+     * reading reviews pages through them slowly; six requests in under a
+     * second does not look like a person. Twenty reviews is enough to spot a
+     * complaint pattern, and the cost of being wrong here is the user's Shopee
+     * account, not ours.
+     */
+    maxRatingPages: 1,
+
+    /** Minimum gap between any two Shopee API calls, in milliseconds. */
+    minRequestIntervalMs: 1200,
+
+    /**
+     * Analyse automatically on page load, or wait to be asked.
+     *
+     * Automatic analysis means every product page a user opens costs API
+     * requests. Manual keeps Sentinel at one request burst per deliberate
+     * click, which is far more defensible traffic.
+     */
+    autoAnalyse: true,
 
     /**
      * Review text filtering.

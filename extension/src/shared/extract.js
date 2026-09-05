@@ -105,17 +105,59 @@
     return response.json();
   }
 
+  /**
+   * Has Shopee flagged this session as automated traffic?
+   *
+   * Shopee redirects to /verify/traffic/error when it decides a session looks
+   * like a script. Continuing to send requests while flagged prolongs the
+   * block, so Sentinel stops entirely rather than making the user's situation
+   * worse for the sake of a score.
+   */
+  function trafficVerificationTripped() {
+    return /\/verify\/traffic|\/verify\/captcha/.test(location.pathname);
+  }
+
+  // Serialise and space out every Shopee API call.
+  //
+  // Firing several requests at once tripped Shopee's traffic verification and
+  // got a live session redirected to /verify/traffic/error. Requests now queue
+  // behind one another with a minimum gap, so our traffic looks like a person
+  // reading a page rather than a script draining it.
+  let requestChain = Promise.resolve();
+  let lastRequestAt = 0;
+
+  function throttled(fn) {
+    const run = async () => {
+      const wait = config.minRequestIntervalMs - (Date.now() - lastRequestAt);
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      lastRequestAt = Date.now();
+      return fn();
+    };
+    // Chain regardless of whether the previous call succeeded.
+    const result = requestChain.then(run, run);
+    requestChain = result.then(
+      () => undefined,
+      () => undefined
+    );
+    return result;
+  }
+
   /** Bridge when it is there, direct fetch when it is not. */
   function apiFetchJson(url) {
+    if (trafficVerificationTripped()) {
+      return Promise.reject(
+        new Error("Shopee traffic verification is active — not sending requests")
+      );
+    }
     if (!bridgeAvailable()) {
       console.warn(
         "[Sentinel] page bridge not loaded — falling back to a direct fetch," +
           " which Shopee's API usually answers with 403. Reload the extension" +
           " at chrome://extensions, then refresh this page."
       );
-      return directFetchJson(url);
+      return throttled(() => directFetchJson(url));
     }
-    return pageFetchJson(url);
+    return throttled(() => pageFetchJson(url));
   }
 
   // --- Layer 1: PDP JSON API -----------------------------------------------
