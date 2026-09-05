@@ -58,7 +58,7 @@
      * requests. Manual keeps Sentinel at one request burst per deliberate
      * click, which is far more defensible traffic.
      */
-    autoAnalyse: true,
+    autoAnalyse: false,
 
     /**
      * Review text filtering.
