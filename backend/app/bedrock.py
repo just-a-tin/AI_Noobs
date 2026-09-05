@@ -11,6 +11,7 @@ import json
 import logging
 
 from .config import settings
+from .dimensions import listed_longest_cm
 from .images import PreparedImage, prepare_images
 from .mocks import mock_analysis
 from .schemas import ANALYSIS_SCHEMA, AnalysisCore, AnalyzeRequest
@@ -128,6 +129,19 @@ def _describe_listing(req: AnalyzeRequest, images: list[PreparedImage]) -> str:
             "limitation in your findings, and keep visualIntegrity near 50."
         )
 
+    # The system prompt tells the model the claimed size is "given to you
+    # below", so it has to actually be here. Parsed deterministically rather
+    # than left to the model, so the claim is ground truth it checks against.
+    listed_cm = listed_longest_cm(req.specs)
+    claimed = (
+        f"\nCLAIMED SIZE: the specifications state a longest dimension of "
+        f"{listed_cm:g} cm. Check this against what this product really "
+        f"measures and against the images."
+        if listed_cm is not None
+        else "\nCLAIMED SIZE: the listing states no dimensions. Judge expected "
+        "versus apparent size only."
+    )
+
     return f"""\
 Analyse this {req.platform.value} listing.
 
@@ -137,6 +151,7 @@ Seller rating: {req.sellerRating if req.sellerRating is not None else "unknown"}
 Shop location: {req.shopLocation or "unknown"}
 Specifications:
 {specs}
+{claimed}
 {manifest}"""
 
 
@@ -166,8 +181,10 @@ class BedrockAnalyzer:
         return self._client
 
     async def analyze(self, req: AnalyzeRequest) -> AnalysisCore:
-        if settings.mock_aws:
-            log.info("MOCK_AWS=true - returning canned verdict for %s", req.itemId)
+        # mock_bedrock, not mock_aws: the two are separate so real analysis can
+        # run against the in-memory cache before DynamoDB is deployed.
+        if settings.mock_bedrock:
+            log.info("mock mode - returning canned verdict for %s", req.itemId)
             return mock_analysis(req)
 
         images = await prepare_images(
