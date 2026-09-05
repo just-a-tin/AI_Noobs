@@ -152,12 +152,24 @@ class BedrockAnalyzer:
         self._client = None
 
     def _get_client(self):
-        if self._client is None:
-            # The Mantle client is the current Messages-API path for Bedrock;
-            # plain AnthropicBedrock is the legacy InvokeModel route.
-            from anthropic import AnthropicBedrockMantle
+        """Build the Bedrock client for the configured API.
 
-            self._client = AnthropicBedrockMantle(aws_region=settings.aws_region)
+        Both expose the same messages.create surface; they differ in endpoint,
+        IAM action and model-id form. See Settings.bedrock_api for why the
+        legacy runtime path is the default.
+        """
+        if self._client is None:
+            if settings.bedrock_api == "mantle":
+                from anthropic import AnthropicBedrockMantle
+
+                self._client = AnthropicBedrockMantle(aws_region=settings.aws_region)
+            else:
+                from anthropic import AnthropicBedrock
+
+                self._client = AnthropicBedrock(aws_region=settings.aws_region)
+            log.info(
+                "bedrock client: %s (%s)", settings.bedrock_api, settings.model_id
+            )
         return self._client
 
     async def analyze(self, req: AnalyzeRequest) -> AnalysisCore:

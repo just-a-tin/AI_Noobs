@@ -23,6 +23,44 @@ def test_every_object_is_strict():
         assert set(obj["required"]) == set(obj["properties"])
 
 
+def test_no_range_constraints_reach_the_api():
+    """Bedrock rejects minimum/maximum on integers with a 400:
+    "For 'integer' type, properties maximum, minimum are not supported".
+
+    Pydantic emits them from Field(ge=..., le=...), so they must be stripped.
+    The bounds still hold — the model still validates the parsed response.
+    """
+    banned = {"minimum", "maximum", "minLength", "maxLength", "pattern", "format"}
+    present = banned & set(all_keys(ANALYSIS_SCHEMA))
+    assert not present, f"schema still carries rejected keywords: {present}"
+
+
+def test_bounds_are_still_enforced_when_parsing():
+    """Stripping the wire schema must not weaken validation of the response."""
+    import pytest
+    from pydantic import ValidationError
+
+    from app.schemas import SubScores
+
+    with pytest.raises(ValidationError):
+        SubScores(
+            visualIntegrity=140,  # out of range
+            specConsistency=50,
+            priceSanity=50,
+            scaleFidelity=50,
+        )
+
+
+def all_keys(node):
+    if isinstance(node, dict):
+        for k, v in node.items():
+            yield k
+            yield from all_keys(v)
+    elif isinstance(node, list):
+        for item in node:
+            yield from all_keys(item)
+
+
 def test_no_dangling_refs():
     """$defs are inlined; a leftover $ref would fail at request time."""
     rendered = repr(ANALYSIS_SCHEMA)

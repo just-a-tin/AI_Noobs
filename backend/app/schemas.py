@@ -280,11 +280,38 @@ class AnalysisResult(AnalysisCore):
     analyzedAt: int | None = None  # epoch seconds
 
 
+#: JSON Schema validation keywords that structured outputs reject.
+#:
+#: Bedrock returns a 400 for these — e.g. `Field(ge=0, le=100)` becomes
+#: "minimum"/"maximum" and fails with "For 'integer' type, properties maximum,
+#: minimum are not supported". Dropping them from the wire schema costs
+#: nothing: the bounds still exist on the Pydantic model, so the response is
+#: validated against them when it is parsed, and the field descriptions state
+#: the intended range in words the model actually reads.
+_UNSUPPORTED_KEYWORDS = frozenset(
+    {
+        "minimum",
+        "maximum",
+        "exclusiveMinimum",
+        "exclusiveMaximum",
+        "multipleOf",
+        "minLength",
+        "maxLength",
+        "pattern",
+        "minItems",
+        "maxItems",
+        "uniqueItems",
+        "format",
+        "default",
+    }
+)
+
+
 def _strictify(node: Any) -> Any:
     """Make a JSON schema acceptable to structured outputs.
 
     Requires `additionalProperties: false` and every property listed in
-    `required` on each object node.
+    `required` on each object node, and removes keywords the API rejects.
 
     Also strips the noise Pydantic generates: auto-titles like
     "Overalltrustscore", and object-level descriptions lifted from class
@@ -295,7 +322,9 @@ def _strictify(node: Any) -> Any:
     """
     if isinstance(node, dict):
         node = {
-            k: _strictify(v) for k, v in node.items() if k != "title"
+            k: _strictify(v)
+            for k, v in node.items()
+            if k != "title" and k not in _UNSUPPORTED_KEYWORDS
         }
         if node.get("type") == "object" and "properties" in node:
             node.pop("description", None)  # class docstring, not model guidance

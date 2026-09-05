@@ -76,7 +76,29 @@ after a CDK deploy. Tests set `SENTINEL_SKIP_DOTENV=1` so a developer's local
 
 ## Model
 
-`anthropic.claude-opus-5` on Bedrock via `AnthropicBedrockMantle`. Structured
-output uses `output_config.format` (json_schema) — GA on Bedrock, so no
+Structured output uses `output_config.format` (json_schema), so there is no
 JSON-repair retry loop. `effort` and `format` are both keys of the single
 `output_config` dict.
+
+**The wire schema must not carry validation keywords.** Bedrock 400s on
+`minimum`/`maximum` for integers — which is exactly what `Field(ge=0, le=100)`
+generates. `_strictify` strips those and similar keywords
+(`_UNSUPPORTED_KEYWORDS`). Nothing is lost: the bounds remain on the Pydantic
+model, so the response is still validated when parsed.
+`test_schema.py::test_no_range_constraints_reach_the_api`.
+
+**Two Bedrock APIs, selected by `BEDROCK_API`.** `mantle` is the modern
+Messages-API endpoint (`AnthropicBedrockMantle`, ids like
+`anthropic.claude-opus-5`); `runtime` is `bedrock-runtime` InvokeModel
+(`AnthropicBedrock`, ids like `us.anthropic.claude-opus-4-6-v1`). Default is
+`runtime`: managed AWS Organizations often deny `bedrock-mantle:*` via service
+control policy, which account-level permissions cannot override.
+
+**Listed ≠ entitled.** `ListFoundationModels` advertises models the account
+cannot invoke. `scripts/list_models.py --features` probes what actually works
+and which of `json_schema` / `effort` / adaptive thinking each supports.
+
+Verified working on the hackathon account (2026-09-05):
+`us.anthropic.claude-opus-4-6-v1` via `runtime`, supporting all three features.
+Opus 5, Sonnet 5, Opus 4.8, Opus 4.7 and Fable 5 return "not available for this
+account"; Claude 3.5 Sonnet is retired by AWS.

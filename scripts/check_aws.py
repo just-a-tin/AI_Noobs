@@ -38,7 +38,8 @@ GREEN, RED, YELLOW, DIM, RESET = (
 OK, BAD, WARN = f"{GREEN}OK{RESET}", f"{RED}FAIL{RESET}", f"{YELLOW}WARN{RESET}"
 
 REGION = os.getenv("AWS_REGION", "us-east-1")
-MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "anthropic.claude-opus-5")
+MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-opus-4-6-v1")
+BEDROCK_API = os.getenv("BEDROCK_API", "runtime").strip().lower()
 
 
 def step(n: int, title: str) -> None:
@@ -67,17 +68,35 @@ def check_credentials() -> bool:
         print(f"    {BAD} boto3 not installed — run the backend pip install")
         return False
 
+    key_id = os.getenv("AWS_ACCESS_KEY_ID", "")
+    has_token = bool(os.getenv("AWS_SESSION_TOKEN"))
+
+    # Temporary credentials start with ASIA and are useless without their
+    # session token — a common and very confusing half-configured state.
+    if key_id.startswith("ASIA") and not has_token:
+        print(f"    {BAD} temporary credentials (ASIA...) without AWS_SESSION_TOKEN")
+        print(f"{DIM}    SSO credentials need all three values. Copy the session"
+              f" token too.{RESET}")
+        return False
+
     try:
         identity = boto3.client("sts", region_name=REGION).get_caller_identity()
     except (ClientError, BotoCoreError) as exc:
         print(f"    {BAD} {exc}")
-        print(f"\n{DIM}    Add these to .env (AWS console → IAM → Users → Security")
-        print(f"    credentials → Create access key):{RESET}")
-        print("      AWS_ACCESS_KEY_ID=AKIA...")
-        print("      AWS_SECRET_ACCESS_KEY=...")
+        msg = str(exc).lower()
+        if "expired" in msg or "invalidclienttoken" in msg:
+            print(f"\n{DIM}    These credentials have expired. Refresh them from"
+                  f" the AWS SSO\n    Access Portal and update .env.{RESET}")
+        else:
+            print(f"\n{DIM}    Add these to .env (AWS console → IAM → Users →"
+                  f" Security\n    credentials → Create access key):{RESET}")
+            print("      AWS_ACCESS_KEY_ID=AKIA...")
+            print("      AWS_SECRET_ACCESS_KEY=...")
         return False
 
+    kind = "temporary (SSO)" if has_token else "permanent IAM"
     print(f"    {OK} authenticated as {identity['Arn']}")
+    print(f"{DIM}    credential type: {kind}{RESET}")
     return True
 
 
@@ -96,32 +115,39 @@ def check_model_access() -> bool:
         return True
 
     ids = {m["modelId"] for m in models}
-    if any(MODEL_ID in i or i.startswith(MODEL_ID) for i in ids):
+
+    # Inference-profile ids carry a region prefix ("us.", "global.") that
+    # foundation-model ids do not, so compare on the bare id or this reports a
+    # scary FAIL for a model that works perfectly.
+    bare = MODEL_ID.split(".", 1)[1] if MODEL_ID.startswith(("us.", "global.", "eu.", "apac.")) else MODEL_ID
+
+    if any(i == bare or i.startswith(bare + ":") for i in ids):
         print(f"    {OK} {MODEL_ID} is offered in {REGION}")
         return True
 
-    print(f"    {BAD} {MODEL_ID} not offered in {REGION}")
-    claude = sorted(i for i in ids if "claude" in i.lower())
-    if claude:
-        print(f"{DIM}    Claude models available here:{RESET}")
-        for i in claude[:12]:
-            print(f"      {i}")
-    else:
-        print(f"{DIM}    No Claude models in this region. Try us-east-1"
-              f" or us-west-2.{RESET}")
-    return False
+    # Advisory only — being listed is not the same as being entitled, and
+    # step 4 is the authoritative test either way.
+    print(f"    {WARN} {MODEL_ID} not found in the catalogue for {REGION}")
+    print(f"{DIM}    Being listed and being entitled differ; step 4 decides."
+          f"\n    Run scripts/list_models.py to see what is actually"
+          f" invocable.{RESET}")
+    return True
 
 
 def check_round_trip() -> bool:
-    step(4, "Live model call")
+    step(4, f"Live model call (bedrock_api={BEDROCK_API})")
     try:
-        from anthropic import AnthropicBedrockMantle
+        from anthropic import AnthropicBedrock, AnthropicBedrockMantle
     except ImportError:
         print(f"    {BAD} anthropic SDK not installed")
         return False
 
     try:
-        client = AnthropicBedrockMantle(aws_region=REGION)
+        client = (
+            AnthropicBedrockMantle(aws_region=REGION)
+            if BEDROCK_API == "mantle"
+            else AnthropicBedrock(aws_region=REGION)
+        )
         response = client.messages.create(
             model=MODEL_ID,
             max_tokens=64,
@@ -133,10 +159,22 @@ def check_round_trip() -> bool:
     except Exception as exc:
         print(f"    {BAD} {type(exc).__name__}: {exc}")
         msg = str(exc).lower()
-        if "accessdenied" in msg or "not authorized" in msg:
+        if "bedrock-mantle" in msg and "explicit deny" in msg:
+            print(f"\n{DIM}    A service control policy denies bedrock-mantle."
+                  f" Managed org accounts\n    often allow only the older API."
+                  f" Set BEDROCK_API=runtime in .env and\n    use a model id of"
+                  f" the form us.anthropic.claude-...{RESET}")
+        elif "not available for this account" in msg:
+            print(f"\n{DIM}    This account is not entitled to {MODEL_ID}."
+                  f" Run\n    scripts/list_models.py to see what it can"
+                  f" actually invoke.{RESET}")
+        elif "legacy" in msg or "end of its life" in msg:
+            print(f"\n{DIM}    That model is retired. Run"
+                  f" scripts/list_models.py for current ones.{RESET}")
+        elif "accessdenied" in msg or "not authorized" in msg:
             print(f"\n{DIM}    Enable model access: AWS console → Bedrock →")
             print(f"    Model access → Manage → tick Claude → Save.")
-            print(f"    Also ensure the IAM user has bedrock:InvokeModel.{RESET}")
+            print(f"    Also ensure the role has bedrock:InvokeModel.{RESET}")
         elif "could not connect" in msg or "endpoint" in msg:
             print(f"\n{DIM}    Bedrock may not exist in {REGION}."
                   f" Try us-east-1.{RESET}")

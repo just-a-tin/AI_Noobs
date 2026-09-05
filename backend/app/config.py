@@ -39,7 +39,22 @@ class Settings:
     # Region matters: Bedrock model availability differs by region.
     aws_region: str = field(default_factory=lambda: os.getenv("AWS_REGION", "us-east-1"))
     model_id: str = field(
-        default_factory=lambda: os.getenv("BEDROCK_MODEL_ID", "anthropic.claude-opus-5")
+        default_factory=lambda: os.getenv(
+            "BEDROCK_MODEL_ID", "us.anthropic.claude-opus-4-6-v1"
+        )
+    )
+
+    # Which Bedrock API to talk to.
+    #   "runtime" - bedrock-runtime InvokeModel, model ids like
+    #               "us.anthropic.claude-opus-4-6-v1"
+    #   "mantle"  - the newer Messages-API endpoint, ids like
+    #               "anthropic.claude-opus-5"
+    # Mantle is the modern default, but restricted accounts (managed AWS
+    # Organizations, hackathon and student orgs) commonly carry a service
+    # control policy denying bedrock-mantle:* outright, so "runtime" is the
+    # default here because it works in strictly more environments.
+    bedrock_api: str = field(
+        default_factory=lambda: os.getenv("BEDROCK_API", "runtime").strip().lower()
     )
     table_name: str = field(
         default_factory=lambda: os.getenv("DDB_TABLE_NAME", "SentinelAnalysisCache")

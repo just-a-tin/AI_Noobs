@@ -186,17 +186,32 @@ hashes rather than URLs.
 
 Mock mode is the default. To use real Claude analysis:
 
-1. Fill `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` into `.env`
-   (AWS console → IAM → Users → Security credentials → Create access key).
+1. Put credentials in `.env` — `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`,
+   plus `AWS_SESSION_TOKEN` if they are temporary SSO credentials (they start
+   with `ASIA` and expire within hours).
 2. Set `MOCK_BEDROCK=false`.
-3. Enable model access: AWS console → Bedrock → Model access → tick Claude.
-4. Verify: `python scripts/check_aws.py`
+3. Find a model this account can actually invoke:
+   `python scripts/list_models.py --features`
+4. Verify the whole path: `python scripts/check_aws.py`
 
 Leave `USE_DYNAMODB=false` until the CDK stack is deployed — the in-memory
 cache works fine, and pointing at a table that doesn't exist only fills the
 logs with errors.
 
 Note that real analysis costs money per listing, and images are token-heavy.
+
+### Two things that bite on restricted AWS accounts
+
+**Listed ≠ entitled.** `ListFoundationModels` will happily advertise every
+Claude model while the account is entitled to a handful. The only reliable test
+is to invoke each one, which is what `scripts/list_models.py` does.
+
+**`bedrock-mantle` may be denied outright.** Managed AWS Organizations
+frequently carry a service control policy denying the newer Messages-API
+endpoint, which no account-level permission can override. `BEDROCK_API=runtime`
+uses the older `bedrock-runtime` path instead and works in more environments.
+The two take different model-id forms — `us.anthropic.claude-opus-4-6-v1`
+versus `anthropic.claude-opus-5`.
 
 ## Going live on AWS
 
